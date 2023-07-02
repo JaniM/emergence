@@ -7,5 +7,8 @@ edition = "2021"
 
 [dependencies]
 chrono = "0.4.26"
-dioxus = "0.3.2"
-dioxus-desktop = "0.3.0"
+
+# using master branch for global hotkeys
+dioxus = { git = "https://github.com/DioxusLabs/dioxus" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus" }
+

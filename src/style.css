@@ -1,0 +1,63 @@
+
+* {
+    margin: 0;
+    padding: 0;
+}
+
+/* TODO: bundle font files */
+/* Roboto is Apache v2 licensed, see https://fonts.google.com/specimen/Roboto */
+@import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
+* {
+    font-family: 'Roboto', sans-serif;
+    font-size: medium;
+}
+
+textarea {
+    font-family: 'Roboto', sans-serif;
+    font-size: medium;
+}
+
+.note-grid {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    grid-gap: 5px;
+}
+
+.note-grid .date {
+    font-weight: bold;
+    text-align: right;
+    color: #666;
+    padding: 5px;
+    border-right: 1px solid #ccc;
+}
+
+.note-grid .group {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-gap: 5px;
+}
+
+.note {
+    border: 1px solid #ccc;
+    background-color: #eee;
+    padding: 5px;
+}
+
+.create-view {
+    display: grid;
+    grid-template-rows: 100px 1fr;
+    grid-gap: 5px;
+}
+
+.create-note {
+    display: grid;
+    justify-items: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.create-note textarea {
+    width: 100%;
+    height: 100%;
+    resize: none;
+}
