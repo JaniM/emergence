@@ -1,27 +1,23 @@
-use crate::data::notes::Note;
+use crate::{
+    data::{notes::Note, query::use_query},
+    use_store, ShowInput,
+};
 use dioxus::prelude::*;
 use std::collections::BTreeMap;
 
 use dioxus::html::input_data::keyboard_types::{Key, Modifiers};
 
-#[derive(Props)]
-pub struct ListNotesProps<'a> {
-    notes: Vec<Note>,
-    create_note: bool,
-    on_create_note: EventHandler<'a, String>,
-}
+pub fn ListNotes(cx: Scope) -> Element {
+    let query = use_query(cx).notes();
+    let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
-pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     let mut groups = BTreeMap::new();
-    for node in cx.props.notes.clone() {
+    for node in query.iter() {
         let date = node.created_at.naive_local().date();
         groups.entry(date).or_insert_with(Vec::new).push(node);
     }
     let mut groups = groups.into_iter().collect::<Vec<_>>();
     groups.reverse();
-    for (_, nodes) in &mut groups {
-        nodes.sort_unstable_by(|a, b| b.created_at.cmp(&a.created_at));
-    }
     let mut groups = groups
         .into_iter()
         .map(|(date, nodes)| {
@@ -37,12 +33,31 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
         })
         .collect::<Vec<_>>();
 
-    if cx.props.create_note {
+    let today = chrono::Local::now().naive_local().date();
+    if groups.is_empty() || groups[0].0 != today {
+        groups.insert(0, (today, vec![]));
+    }
+
+    if show_input.read().0 {
         groups[0].1.insert(
             0,
             rsx! {
                 NoteInput {
-                    on_create_note: move |e| cx.props.on_create_note.call(e),
+                    on_create_note: |_| show_input.write().0 = false,
+                    on_cancel: |_| show_input.write().0 = false
+                }
+            },
+        );
+    } else {
+        groups[0].1.insert(
+            0,
+            rsx! {
+                button {
+                    class: "add-note",
+                    onclick: |_| {
+                        show_input.write().0 = true;
+                    },
+                    "Add note"
                 }
             },
         );
@@ -80,9 +95,11 @@ fn ViewNote(cx: Scope, note: Note) -> Element {
 #[derive(Props)]
 struct NoteInputProps<'a> {
     on_create_note: EventHandler<'a, String>,
+    on_cancel: EventHandler<'a, ()>,
 }
 
 fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
+    let store = use_store(cx);
     let text = use_state(cx, String::new);
 
     let rows = text.matches("\n").count() as i64 + 1;
@@ -96,8 +113,15 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
             oninput: |e| text.set(e.value.clone()),
             onkeypress: |e| {
                 if e.key() == Key::Enter && e.modifiers().contains(Modifiers::CONTROL) {
+                    if !text.is_empty() {
+                        store.read().add_note(text.get().clone(), vec![]).unwrap();
+                    }
                     cx.props.on_create_note.call(text.get().clone());
                     text.set(String::new());
+                }
+
+                if e.key() == Key::Escape {
+                    cx.props.on_cancel.call(());
                 }
             },
         }

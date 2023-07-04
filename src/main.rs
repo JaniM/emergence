@@ -22,36 +22,28 @@ fn main() {
     );
 }
 
+pub struct ShowInput(pub bool);
+
 fn App(cx: Scope) -> Element {
     use_shared_state_provider(cx, Store::new);
-    let store = use_store(cx);
-
-    let show_input = use_state(cx, || false);
+    use_shared_state_provider(cx, || ShowInput(false));
+    let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
     dioxus_desktop::use_global_shortcut(cx, "ctrl+n", {
         to_owned![show_input];
         move || {
-            show_input.set(true);
+            show_input.write().0 = true;
         }
     });
 
     render! {
         div {
             style { include_str!("style.css") },
-            ListNotes {
-                notes: store.read().notes.get_notes(),
-                create_note: *show_input.get(),
-                on_create_note: |text: String| {
-                    if !text.is_empty() {
-                        store.write().notes.add(text);
-                    }
-                    show_input.set(false);
-                },
-            },
+            ListNotes { },
         }
     }
 }
 
-fn use_store(cx: Scope) -> &UseSharedState<data::Store> {
+fn use_store(cx: &ScopeState) -> &UseSharedState<data::Store> {
     use_shared_state(cx).expect("Store context not set")
 }
