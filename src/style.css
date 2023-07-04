@@ -41,19 +41,7 @@ textarea {
     border: 1px solid #ccc;
     background-color: #eee;
     padding: 5px;
-}
-
-.create-view {
-    display: grid;
-    grid-template-rows: 100px 1fr;
-    grid-gap: 5px;
-}
-
-.create-note {
-    display: grid;
-    justify-items: center;
-    align-items: center;
-    padding: 20px;
+    white-space: pre-wrap;
 }
 
 .create-note textarea {
