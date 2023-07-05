@@ -1,10 +1,11 @@
 use crate::{
-    data::{notes::Note, query::use_query},
+    data::{notes::Note, query::use_query, subjects::Subject},
     use_store, ShowInput,
 };
 use dioxus::prelude::*;
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, rc::Rc};
 
+use super::select_subject::SelectSubject;
 use dioxus::html::input_data::keyboard_types::{Key, Modifiers};
 
 pub fn ListNotes(cx: Scope) -> Element {
@@ -16,8 +17,10 @@ pub fn ListNotes(cx: Scope) -> Element {
         let date = node.created_at.naive_local().date();
         groups.entry(date).or_insert_with(Vec::new).push(node);
     }
+
     let mut groups = groups.into_iter().collect::<Vec<_>>();
     groups.reverse();
+
     let mut groups = groups
         .into_iter()
         .map(|(date, nodes)| {
@@ -38,30 +41,26 @@ pub fn ListNotes(cx: Scope) -> Element {
         groups.insert(0, (today, vec![]));
     }
 
-    if show_input.read().0 {
-        groups[0].1.insert(
-            0,
-            rsx! {
-                NoteInput {
-                    on_create_note: |_| show_input.write().0 = false,
-                    on_cancel: |_| show_input.write().0 = false
-                }
-            },
-        );
+    let add_note = if show_input.read().0 {
+        rsx! {
+            NoteInput {
+                on_create_note: |_| show_input.write().0 = false,
+                on_cancel: |_| show_input.write().0 = false
+            }
+        }
     } else {
-        groups[0].1.insert(
-            0,
-            rsx! {
-                button {
-                    class: "add-note",
-                    onclick: |_| {
-                        show_input.write().0 = true;
-                    },
-                    "Add note"
-                }
-            },
-        );
-    }
+        rsx! {
+            button {
+                class: "add-note",
+                onclick: |_| {
+                    show_input.write().0 = true;
+                },
+                "Add note"
+            }
+        }
+    };
+
+    groups[0].1.insert(0, add_note);
 
     render! {
         div {
@@ -101,29 +100,62 @@ struct NoteInputProps<'a> {
 fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     let store = use_store(cx);
     let text = use_state(cx, String::new);
+    let subjects = use_ref(cx, Vec::new);
+    let show_subjects = use_state(cx, || false);
+    let textarea = use_state(cx, || None::<Rc<MountedData>>);
 
     let rows = text.matches("\n").count() as i64 + 1;
 
-    cx.render(rsx! {
-        textarea {
-            class: "note",
-            rows: rows,
-            value: "{text}",
-            onmounted: |e| { e.inner().set_focus(true); },
-            oninput: |e| text.set(e.value.clone()),
-            onkeypress: |e| {
-                if e.key() == Key::Enter && e.modifiers().contains(Modifiers::CONTROL) {
-                    if !text.is_empty() {
-                        store.read().add_note(text.get().clone(), vec![]).unwrap();
-                    }
-                    cx.props.on_create_note.call(text.get().clone());
-                    text.set(String::new());
-                }
+    let onkeypress = |e: KeyboardEvent| match e.key() {
+        Key::Enter if e.modifiers().contains(Modifiers::CONTROL) => {
+            if !text.is_empty() {
+                store
+                    .read()
+                    .add_note(text.get().clone(), subjects.read().clone())
+                    .unwrap();
+            }
+            cx.props.on_create_note.call(text.get().clone());
+            text.set(String::new());
+        }
+        Key::Escape => {
+            cx.props.on_cancel.call(());
+        }
+        Key::Character(c) if c == "@" => {
+            show_subjects.set(true);
+        }
+        _ => {}
+    };
 
-                if e.key() == Key::Escape {
-                    cx.props.on_cancel.call(());
+    cx.render(rsx! {
+        div {
+            class: "note",
+            textarea {
+                rows: rows,
+                value: "{text}",
+                onmounted: |e| {
+                    textarea.set(Some(e.inner().clone()));
+                    e.inner().set_focus(true);
+                },
+                oninput: |e| text.set(e.value.clone()),
+                onkeypress: onkeypress,
+            }
+            if *show_subjects.get() {
+                rsx! {
+                    SelectSubject {
+                        on_select: |subject: Subject| {
+                            subjects.write().push(subject.id);
+                            show_subjects.set(false);
+                            textarea.get().as_ref().unwrap().set_focus(true);
+                            // remove the @
+                            text.set(text.get()[0 .. text.get().len() - 1].to_string());
+                        },
+                        on_cancel: |_| {
+                            show_subjects.set(false);
+                            textarea.get().as_ref().unwrap().set_focus(true);
+                        }
+                    }
                 }
-            },
+            }
         }
     })
 }
