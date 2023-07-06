@@ -12,15 +12,11 @@
     font-size: medium;
 }
 
-textarea {
-    font-family: 'Roboto', sans-serif;
-    font-size: medium;
-}
-
 .note-grid {
+    padding: 20px;
     display: grid;
     grid-template-columns: 100px 1fr;
-    grid-gap: 5px;
+    grid-gap: 10px;
 }
 
 .note-grid .date {
@@ -34,10 +30,12 @@ textarea {
 .note-grid .group {
     display: grid;
     grid-template-columns: 1fr;
-    grid-gap: 5px;
+    grid-gap: 10px;
 }
 
 .note {
+    position: relative;
+    display: block;
     border: 1px solid #ccc;
     background-color: #eee;
     padding: 5px;
@@ -52,6 +50,29 @@ textarea {
     outline-style: none;
     outline-width: 0;
     white-space: pre-wrap;
+}
+
+.note-subjects {
+    position: absolute;
+    top: 0;
+    right: 0;
+    transform: translateY(-50%);
+    width: fit-content;
+    height: fit-content;
+    display: flex;
+    flex-flow: row;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 5px;
+}
+
+.subject-card {
+    background-color: #bbd;
+    width: fit-content;
+    height: fit-content;
+    padding: 0px 4px;
+    font-size: small;
+    border-radius: 10%;
 }
 
 .add-note {

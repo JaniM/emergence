@@ -5,9 +5,19 @@ mod views;
 
 use data::Store;
 use dioxus::prelude::*;
+use tracing::{metadata::LevelFilter, trace};
 use views::list_notes::ListNotes;
 
 fn main() {
+    tracing::subscriber::set_global_default(
+        tracing_subscriber::FmtSubscriber::builder()
+            .with_max_level(LevelFilter::TRACE)
+            .finish(),
+    )
+    .unwrap();
+
+    trace!("Starting app");
+
     // launch the dioxus app in a webview
     dioxus_desktop::launch_cfg(
         App,

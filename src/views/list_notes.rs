@@ -1,5 +1,5 @@
 use crate::{
-    data::{notes::Note, query::use_query, subjects::Subject},
+    data::{notes::Note, query::{use_note_query, use_subject_query}, subjects::{Subject, SubjectId}},
     use_store, ShowInput,
 };
 use dioxus::prelude::*;
@@ -9,7 +9,7 @@ use super::select_subject::SelectSubject;
 use dioxus::html::input_data::keyboard_types::{Key, Modifiers};
 
 pub fn ListNotes(cx: Scope) -> Element {
-    let query = use_query(cx).notes();
+    let query = use_note_query(cx).notes();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
     let mut groups = BTreeMap::new();
@@ -86,7 +86,30 @@ fn ViewNote(cx: Scope, note: Note) -> Element {
     cx.render(rsx! {
         div {
             class: "note",
-            "{note.text}"
+            SubjectCards { sids: note.subjects.clone() },
+            div {
+                class: "note-content",
+                "{note.text}",
+            },
+        }
+    })
+}
+
+#[inline_props]
+fn SubjectCards(cx: Scope, sids: Vec<SubjectId>) -> Element {
+    let subjects = use_subject_query(cx).subjects();
+    cx.render(rsx! {
+        div {
+            class: "note-subjects",
+            sids.iter().map(|sid| {
+                let s = subjects.get(sid).unwrap();
+                rsx! {
+                    div {
+                        class: "subject-card",
+                        "{s.name}"
+                    }
+                }
+            })
         }
     })
 }
@@ -129,16 +152,20 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     cx.render(rsx! {
         div {
             class: "note",
-            textarea {
-                rows: rows,
-                value: "{text}",
-                onmounted: |e| {
-                    textarea.set(Some(e.inner().clone()));
-                    e.inner().set_focus(true);
-                },
-                oninput: |e| text.set(e.value.clone()),
-                onkeypress: onkeypress,
-            }
+            SubjectCards { sids: subjects.read().clone() },
+            div {
+                class: "note-content",
+                textarea {
+                    rows: rows,
+                    value: "{text}",
+                    onmounted: |e| {
+                        textarea.set(Some(e.inner().clone()));
+                        e.inner().set_focus(true);
+                    },
+                    oninput: |e| text.set(e.value.clone()),
+                    onkeypress: onkeypress,
+                }
+            },
             if *show_subjects.get() {
                 rsx! {
                     SelectSubject {
