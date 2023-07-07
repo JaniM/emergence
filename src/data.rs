@@ -2,6 +2,7 @@ pub mod notes;
 pub mod query;
 pub mod subjects;
 
+use rusqlite::functions::FunctionFlags;
 use rusqlite::{params, Connection, Result};
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
@@ -25,6 +26,7 @@ impl Store {
     #[instrument()]
     pub fn new() -> Self {
         let conn = Connection::open("data.db").unwrap();
+        add_compare_function(&conn).unwrap();
         setup_tables(&conn).unwrap();
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
@@ -80,8 +82,8 @@ impl Store {
             let id: u64 = tx
                 .prepare_cached(
                     "INSERT INTO notes (text, created_at)
-                VALUES (?1, unixepoch(?2))
-                RETURNING id",
+                    VALUES (?1, unixepoch(?2))
+                    RETURNING id",
                 )?
                 .query_row(params![text, chrono::Utc::now()], |row| row.get(0))?;
 
@@ -141,6 +143,11 @@ impl Store {
         Ok(notes)
     }
 
+    /// Finds subjects that match the given search string.
+    /// The search is case-insensitive and matches substrings.
+    /// The results are sorted alphabetically.
+    /// The implementation is quite slow, but it's good enough for now.
+    /// TODO: Implement a full-text search (FTS5).
     #[instrument(skip(self))]
     pub fn find_subjects(&self, search: &str) -> Result<Vec<Subject>> {
         trace!("Begin");
@@ -148,7 +155,7 @@ impl Store {
         let mut stmt = conn.prepare_cached(
             "SELECT id, name
             FROM subjects
-            WHERE instr(name, ?1) > 0
+            WHERE instr_lower(name, ?1)
             ORDER BY name",
         )?;
         let subjects = stmt
@@ -205,5 +212,24 @@ fn setup_tables(conn: &Connection) -> Result<()> {
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
     ",
+    )
+}
+
+fn add_compare_function(conn: &Connection) -> Result<()> {
+    fn instr_lower(haystack: &str, needle: &str) -> bool {
+        haystack.to_lowercase().contains(&needle.to_lowercase())
+    }
+
+    conn.create_scalar_function(
+        "instr_lower",
+        2,
+        FunctionFlags::SQLITE_UTF8
+            | FunctionFlags::SQLITE_DETERMINISTIC
+            | FunctionFlags::SQLITE_INNOCUOUS,
+        |ctx| {
+            let haystack = ctx.get::<String>(0)?;
+            let needle = ctx.get::<String>(1)?;
+            Ok(instr_lower(&haystack, &needle))
+        },
     )
 }

@@ -1,4 +1,4 @@
-use crate::data::subjects::Subject;
+use crate::data::subjects::{Subject, SubjectId};
 use crate::use_store;
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
@@ -7,12 +7,17 @@ use dioxus::prelude::*;
 pub struct Props<'a> {
     on_select: EventHandler<'a, Subject>,
     on_cancel: EventHandler<'a, ()>,
+    ignore_subjects: Vec<SubjectId>,
 }
 
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
     let store = use_store(cx);
     let search = use_state(cx, String::new);
     let subjects = store.read().find_subjects(search.get().as_str()).unwrap();
+    let subjects = subjects
+        .into_iter()
+        .filter(|s| !cx.props.ignore_subjects.contains(&s.id))
+        .collect::<Vec<_>>();
     let subjects = std::rc::Rc::new(subjects);
 
     let onkeydown = {
@@ -35,28 +40,41 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         div {
-            class: "select-subject",
-            textarea {
-                class: "search",
-                value: "{search}",
-                rows: 1,
-                oninput: |e| search.set(e.value.clone()),
-                onkeydown: onkeydown,
-                onmounted: |e| { e.inner().set_focus(true); },
-            },
+            class: "select-subject-wrapper",
             div {
-                class: "subjects",
-                subjects.iter().cloned().map(|subject| {
-                    rsx! {
-                        div {
-                            onclick: move |_| {
-                                cx.props.on_select.call(subject.clone());
-                            },
-                            "{subject.name}"
-                        }
+                class: "relative",
+                div {
+                    class: "select-subject",
+                    textarea {
+                        class: "search",
+                        value: "{search}",
+                        rows: 1,
+                        oninput: |e| search.set(e.value.clone()),
+                        onkeydown: onkeydown,
+                        onmounted: |e| { e.inner().set_focus(true); },
+                    },
+                    div {
+                        class: "subjects",
+                        subjects.iter().cloned().map(|subject| {
+                            let subject2 = subject.clone();
+                            rsx! {
+                                div {
+                                    tabindex: 0,
+                                    onclick: move |_| {
+                                        cx.props.on_select.call(subject.clone());
+                                    },
+                                    onkeydown: move |e: KeyboardEvent| {
+                                        if e.key() == Key::Enter || e.key() == Key::Character(" ".to_string()) {
+                                            cx.props.on_select.call(subject2.clone());
+                                        }
+                                    },
+                                    "{subject.name}"
+                                }
+                            }
+                        })
                     }
-                })
-            }
+                }
+            },
         }
     })
 }

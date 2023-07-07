@@ -12,6 +12,14 @@
     font-size: medium;
 }
 
+.magic-capture {
+    position: fixed;
+    top: -10px;
+    left: -10px;
+    width: 1px;
+    height: 1px;
+}
+
 .note-grid {
     padding: 20px;
     display: grid;
@@ -73,6 +81,7 @@
     padding: 0px 4px;
     font-size: small;
     border-radius: 10%;
+    cursor: pointer;
 }
 
 .add-note {
@@ -88,42 +97,56 @@
     background-color: #ddd;
 }
 
-.create-note textarea {
+.create-note > textarea {
     width: 100%;
     height: 100%;
     resize: none;
 }
 
+.select-subject-wrapper {
+    display: flex;
+    flex-flow: row;
+    justify-content: flex-end;
+}
+
+.relative {
+    z-index: 1;
+    height: 0;
+}
+
 .select-subject {
+    overflow: hidden;
     border: 1px solid #ccc;
-    background-color: #eee;
+    background-color: #ccd;
     padding: 5px;
-    white-space: pre-wrap;
-    text-align: left;
     display: grid;
     grid-template-columns: 1fr;
     grid-gap: 5px;
 }
 
 .select-subject .search {
-    width: 100%;
+    width: auto;
     resize: none;
 }
 
 .select-subject .subjects {
+    overflow-y: scroll;
     display: grid;
     grid-template-columns: 1fr;
     grid-gap: 5px;
 }
 
-.select-subject .subjects div {
+.select-subject .subjects > div {
+    max-width: 400px;
     border: 1px solid #ccc;
-    background-color: #eee;
+    background-color: #bbd;
     padding: 5px;
     white-space: pre-wrap;
     text-align: left;
+    cursor: pointer;
 }
 
-.select-subject .subjects div:hover {
-    background-color: #ddd;
+.select-subject .subjects > div:hover,
+.select-subject .subjects > div:focus {
+    background-color: #ccd;
 }

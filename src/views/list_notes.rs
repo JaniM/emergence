@@ -1,5 +1,9 @@
 use crate::{
-    data::{notes::Note, query::{use_note_query, use_subject_query}, subjects::{Subject, SubjectId}},
+    data::{
+        notes::Note,
+        query::{use_note_query, use_subject_query},
+        subjects::{Subject, SubjectId},
+    },
     use_store, ShowInput,
 };
 use dioxus::prelude::*;
@@ -95,21 +99,48 @@ fn ViewNote(cx: Scope, note: Note) -> Element {
     })
 }
 
-#[inline_props]
-fn SubjectCards(cx: Scope, sids: Vec<SubjectId>) -> Element {
+#[derive(Props)]
+struct SubjectCardsProps<'a> {
+    sids: Vec<SubjectId>,
+    on_add_subject: Option<EventHandler<'a, ()>>,
+    on_click_subject: Option<EventHandler<'a, Subject>>,
+}
+
+fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
     let subjects = use_subject_query(cx).subjects();
+    let mut cards = cx
+        .props
+        .sids
+        .iter()
+        .map(|sid| {
+            let s = subjects.get(sid).unwrap().clone();
+            let on_click_subject = &cx.props.on_click_subject;
+            rsx! {
+                div {
+                    class: "subject-card",
+                    onclick: move |_| {
+                        if let Some(on_click_subject) = on_click_subject {
+                            on_click_subject.call(s.clone());
+                        }
+                    },
+                    "{s.name}"
+                }
+            }
+        })
+        .collect::<Vec<_>>();
+    if let Some(on_add_subject) = &cx.props.on_add_subject {
+        cards.push(rsx! {
+            div {
+                class: "subject-card",
+                onclick: |_| on_add_subject.call(()),
+                "+"
+            }
+        });
+    }
     cx.render(rsx! {
         div {
             class: "note-subjects",
-            sids.iter().map(|sid| {
-                let s = subjects.get(sid).unwrap();
-                rsx! {
-                    div {
-                        class: "subject-card",
-                        "{s.name}"
-                    }
-                }
-            })
+            cards.into_iter()
         }
     })
 }
@@ -121,10 +152,17 @@ struct NoteInputProps<'a> {
 }
 
 fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
+    #[derive(PartialEq, Eq, Clone, Copy)]
+    enum ShowSubjects {
+        No,
+        YesKeyboard,
+        YesMouse,
+    }
+
     let store = use_store(cx);
     let text = use_state(cx, String::new);
     let subjects = use_ref(cx, Vec::new);
-    let show_subjects = use_state(cx, || false);
+    let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 
     let rows = text.matches("\n").count() as i64 + 1;
@@ -143,16 +181,35 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
         Key::Escape => {
             cx.props.on_cancel.call(());
         }
-        Key::Character(c) if c == "@" => {
-            show_subjects.set(true);
+        Key::Character(c) if c == "@" && *show_subjects.get() == ShowSubjects::No => {
+            show_subjects.set(ShowSubjects::YesKeyboard);
         }
         _ => {}
+    };
+
+    let on_select_subject = |subject: Subject| {
+        subjects.write().push(subject.id);
+        show_subjects.set(ShowSubjects::No);
+        textarea.get().as_ref().unwrap().set_focus(true);
+        if *show_subjects.get() == ShowSubjects::YesKeyboard
+            && text.get().chars().last() == Some('@')
+        {
+            // remove the @
+            text.set(text.get()[0..text.get().len() - 1].to_string());
+        }
     };
 
     cx.render(rsx! {
         div {
             class: "note",
-            SubjectCards { sids: subjects.read().clone() },
+            SubjectCards {
+                sids: subjects.read().clone(),
+                on_add_subject: |_| show_subjects.set(ShowSubjects::YesMouse),
+                on_click_subject: |subject: Subject| {
+                    subjects.write().retain(|s| *s != subject.id);
+                    textarea.get().as_ref().unwrap().set_focus(true);
+                },
+            },
             div {
                 class: "note-content",
                 textarea {
@@ -166,20 +223,15 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                     onkeypress: onkeypress,
                 }
             },
-            if *show_subjects.get() {
+            if *show_subjects.get() != ShowSubjects::No {
                 rsx! {
                     SelectSubject {
-                        on_select: |subject: Subject| {
-                            subjects.write().push(subject.id);
-                            show_subjects.set(false);
-                            textarea.get().as_ref().unwrap().set_focus(true);
-                            // remove the @
-                            text.set(text.get()[0 .. text.get().len() - 1].to_string());
-                        },
+                        on_select: on_select_subject,
                         on_cancel: |_| {
-                            show_subjects.set(false);
+                            show_subjects.set(ShowSubjects::No);
                             textarea.get().as_ref().unwrap().set_focus(true);
-                        }
+                        },
+                        ignore_subjects: subjects.read().clone(),
                     }
                 }
             }

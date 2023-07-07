@@ -3,8 +3,13 @@
 mod data;
 mod views;
 
+use std::rc::Rc;
+
 use data::Store;
-use dioxus::prelude::*;
+use dioxus::{
+    html::input_data::keyboard_types::{Key, Modifiers},
+    prelude::*,
+};
 use tracing::{metadata::LevelFilter, trace};
 use views::list_notes::ListNotes;
 
@@ -38,17 +43,32 @@ fn App(cx: Scope) -> Element {
     use_shared_state_provider(cx, Store::new);
     use_shared_state_provider(cx, || ShowInput(false));
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
+    let magic_capture_ref = use_ref(cx, || None::<Rc<MountedData>>);
 
-    dioxus_desktop::use_global_shortcut(cx, "ctrl+n", {
-        to_owned![show_input];
-        move || {
+    if let Some(magic_capture) = &*magic_capture_ref.read() {
+        if !show_input.read().0 {
+            magic_capture.set_focus(true);
+        }
+    }
+
+    let onkeydown = move |e: KeyboardEvent| match e.key() {
+        Key::Character(c) if c == "n" && e.modifiers().contains(Modifiers::CONTROL) => {
             show_input.write().0 = true;
         }
-    });
+        _ => {}
+    };
 
     render! {
         div {
+            onkeydown: onkeydown,
             style { include_str!("style.css") },
+            div {
+                class: "magic-capture",
+                tabindex: 0,
+                onmounted: |e| {
+                    magic_capture_ref.set(Some(e.inner().clone()));
+                },
+            }
             ListNotes { },
         }
     }
