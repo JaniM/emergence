@@ -81,19 +81,22 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
 
     render! {
         div {
-            class: "note-grid",
-            groups.into_iter().map(|(date, nodes)| {
-                rsx! {
-                    div {
-                        class: "date",
-                        r#"{date.format("%Y-%m-%d")}"#
-                    },
-                    div {
-                        class: "group",
-                        nodes.into_iter()
+            class: "note-grid-wrapper",
+            div {
+                class: "note-grid",
+                groups.into_iter().map(|(date, nodes)| {
+                    rsx! {
+                        div {
+                            class: "date",
+                            r#"{date.format("%Y-%m-%d")}"#
+                        },
+                        div {
+                            class: "group",
+                            nodes.into_iter()
+                        }
                     }
-                }
-            })
+                })
+            }
         }
     }
 }

@@ -23,17 +23,22 @@ div, textarea, input, button {
     height: 1px;
 }
 
+.app {
+    height: calc(100vh - 40px);
+    overflow: hidden;
+    padding: 20px;
+}
+
 .journal {
     display: grid;
+    height: 100%;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
-    padding: 20px;
 }
 
 .journal .header {
     border-bottom: 1px solid #ccc;
     padding-bottom: 10px;
-    margin-bottom: 10px;
     display: grid;
     grid-template-columns: 100px 1fr auto;
 }
@@ -67,6 +72,15 @@ div, textarea, input, button {
     align-items: flex-end;
 }
 
+.journal .notes {
+    overflow-y: scroll;
+    display: grid;
+}
+
+.note-grid-wrapper {
+    margin-top: 10px;
+}
+
 .note-grid {
     display: grid;
     grid-template-columns: 100px 1fr;
@@ -85,11 +99,13 @@ div, textarea, input, button {
     display: grid;
     grid-template-columns: 1fr;
     grid-gap: 10px;
+    height: fit-content;
 }
 
 .note {
     position: relative;
     display: block;
+    height: fit-content;
     border: 1px solid #ccc;
     background-color: #eee;
     padding: 5px;
@@ -109,7 +125,7 @@ div, textarea, input, button {
 .note-subjects {
     position: absolute;
     top: 0;
-    right: 0;
+    right: 15px;
     transform: translateY(-50%);
     width: fit-content;
     height: fit-content;

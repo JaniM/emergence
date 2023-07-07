@@ -61,6 +61,7 @@ fn App(cx: Scope) -> Element {
 
     render! {
         div {
+            class: "app",
             onkeydown: onkeydown,
             style { include_str!("style.css") },
             div {

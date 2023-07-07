@@ -57,11 +57,14 @@ pub fn Journal(cx: Scope) -> Element {
                     }
                 }
             },
-            ListNotes {
-                subject: *my_subject.get(),
-                on_select_subject: |subject| {
-                    my_subject.set(Some(subject));
-                },
+            div {
+                class: "notes",
+                ListNotes {
+                    subject: *my_subject.get(),
+                    on_select_subject: |subject| {
+                        my_subject.set(Some(subject));
+                    },
+                }
             }
         }
     }
