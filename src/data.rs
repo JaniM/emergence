@@ -122,8 +122,8 @@ impl Store {
             WHERE EXISTS (
                 SELECT 1
                 FROM notes_subjects
-                WHERE (note_id = notes.id AND subject_id = ?1) OR ?1 IS NULL
-            )
+                WHERE note_id = notes.id AND subject_id = ?1
+            ) OR ?1 IS NULL
             GROUP BY id
             ORDER BY created_at DESC"#,
         )?;
@@ -201,7 +201,7 @@ impl Store {
 
 fn setup_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
-        "
+        r#"
         CREATE TABLE IF NOT EXISTS subjects (
             id INTEGER PRIMARY KEY,
             name TEXT NOT NULL
@@ -218,7 +218,7 @@ fn setup_tables(conn: &Connection) -> Result<()> {
             FOREIGN KEY (note_id) REFERENCES notes(id),
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
-    ",
+    "#,
     )
 }
 
@@ -241,4 +241,27 @@ fn add_instr_lower(conn: &Connection) -> Result<()> {
             Ok(instr_lower(&haystack, &needle))
         },
     )
+}
+
+#[allow(dead_code)]
+fn shove_test_data(conn: &mut Connection) -> Result<()> {
+    let tx = conn.transaction()?;
+    for i in 0..10000 {
+        let id: u64 = tx
+            .prepare(
+                "INSERT INTO notes (text, created_at)
+            VALUES (?1, unixepoch(?2))
+            RETURNING id",
+            )?
+            .query_row(
+                params![format!("Test Note {}", i), chrono::Utc::now()],
+                |row| row.get(0),
+            )?;
+        tx.execute(
+            "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
+            params![id, (i % 5) + 1],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
 }
