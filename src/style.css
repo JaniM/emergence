@@ -9,6 +9,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
 * {
     font-family: 'Roboto', sans-serif;
+}
+
+div, textarea, input, button {
     font-size: medium;
 }
 
@@ -20,8 +23,51 @@
     height: 1px;
 }
 
-.note-grid {
+.journal {
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
     padding: 20px;
+}
+
+.journal .header {
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+    display: grid;
+    grid-template-columns: 100px 1fr auto;
+}
+
+.journal .header .title {
+    font-size: 1.6em;
+    padding-left: 15px;
+}
+
+.journal .header .select-button {
+    border: 1px solid #ccc;
+    margin: -1px;
+    padding: 5px;
+    background-color: #eee;
+    font-style: italic;
+    cursor: pointer;
+}
+
+.row {
+    display: flex;
+    flex-flow: row;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 5px;
+}
+
+.journal .header .select-column {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+.note-grid {
     display: grid;
     grid-template-columns: 100px 1fr;
     grid-gap: 10px;

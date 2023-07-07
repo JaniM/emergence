@@ -1,7 +1,9 @@
+use crate::data::query::use_subject_query;
 use crate::data::subjects::{Subject, SubjectId};
 use crate::use_store;
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
+use tracing::{instrument, trace};
 
 #[derive(Props)]
 pub struct Props<'a> {
@@ -10,15 +12,28 @@ pub struct Props<'a> {
     ignore_subjects: Vec<SubjectId>,
 }
 
+#[instrument(skip_all)]
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
     let store = use_store(cx);
     let search = use_state(cx, String::new);
-    let subjects = store.read().find_subjects(search.get().as_str()).unwrap();
-    let subjects = subjects
-        .into_iter()
-        .filter(|s| !cx.props.ignore_subjects.contains(&s.id))
-        .collect::<Vec<_>>();
-    let subjects = std::rc::Rc::new(subjects);
+
+    let subjects = use_subject_query(cx).subjects();
+
+    let subjects = use_memo(
+        cx,
+        (&cx.props.ignore_subjects, &*subjects, search),
+        |(ignore_subjects, subjects, search)| {
+            trace!("Filtering subjects: {:?}", search);
+            let subjects = subjects
+                .values()
+                .filter(|s| !ignore_subjects.contains(&s.id))
+                .filter(|s| s.name.to_lowercase().contains(&search.to_lowercase()))
+                .cloned()
+                .collect::<Vec<_>>();
+            trace!("Finished");
+            std::rc::Rc::new(subjects)
+        },
+    );
 
     let onkeydown = {
         let subjects = subjects.clone();

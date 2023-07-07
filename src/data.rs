@@ -2,6 +2,7 @@ pub mod notes;
 pub mod query;
 pub mod subjects;
 
+use chrono::TimeZone;
 use rusqlite::functions::FunctionFlags;
 use rusqlite::{params, Connection, Result};
 use std::rc::Rc;
@@ -25,8 +26,9 @@ pub struct Store {
 impl Store {
     #[instrument()]
     pub fn new() -> Self {
+        trace!("Begin");
         let conn = Connection::open("data.db").unwrap();
-        add_compare_function(&conn).unwrap();
+        add_instr_lower(&conn).unwrap();
         setup_tables(&conn).unwrap();
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
@@ -37,13 +39,15 @@ impl Store {
             })),
         };
         store.update_subject_sources();
+        trace!("Finished");
         store
     }
 
     #[instrument(skip_all)]
     pub(self) fn add_source(&self, source: Rc<RefCell<NoteQuerySource>>) {
         trace!("Adding note source");
-        source.borrow_mut().note_data = self.get_notes().unwrap();
+        let subject = source.borrow().subject;
+        source.borrow_mut().note_data = self.get_notes(subject).unwrap();
         self.note_sources.borrow_mut().push(source);
     }
 
@@ -53,14 +57,14 @@ impl Store {
         sources.retain(|s| s.borrow().alive);
         for source in sources.iter() {
             let mut source = source.borrow_mut();
-            source.note_data = self.get_notes().unwrap();
+            source.note_data = self.get_notes(source.subject).unwrap();
             (source.update_callback)();
         }
     }
 
     #[instrument(skip(self))]
     fn update_subject_sources(&self) {
-        let subjects = self.find_subjects("").unwrap();
+        let subjects = self.get_subjects().unwrap();
         let subjects = subjects
             .into_iter()
             .map(|s| (s.id, s))
@@ -104,7 +108,7 @@ impl Store {
     }
 
     #[instrument(skip(self))]
-    pub fn get_notes(&self) -> Result<Vec<notes::Note>> {
+    pub fn get_notes(&self, subject: Option<SubjectId>) -> Result<Vec<notes::Note>> {
         trace!("Begin");
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
@@ -112,14 +116,19 @@ impl Store {
                 id,
                 text,
                 coalesce(group_concat(subject_id), "") as subjects,
-                datetime(created_at, 'unixepoch') as created_at
+                created_at
             FROM notes
             LEFT JOIN notes_subjects ON notes.id = notes_subjects.note_id
+            WHERE EXISTS (
+                SELECT 1
+                FROM notes_subjects
+                WHERE (note_id = notes.id AND subject_id = ?1) OR ?1 IS NULL
+            )
             GROUP BY id
             ORDER BY created_at DESC"#,
         )?;
         let notes = stmt
-            .query_map(params![], |row| {
+            .query_map(params![subject], |row| {
                 let subjects_string = row.get::<_, String>(2)?;
                 let subjects = if subjects_string.is_empty() {
                     vec![]
@@ -134,7 +143,7 @@ impl Store {
                     id: NoteId(row.get(0)?),
                     text: row.get(1)?,
                     subjects,
-                    created_at: row.get(3)?,
+                    created_at: chrono::Local.timestamp_opt(row.get(3)?, 0).unwrap(),
                 }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -146,20 +155,18 @@ impl Store {
     /// Finds subjects that match the given search string.
     /// The search is case-insensitive and matches substrings.
     /// The results are sorted alphabetically.
-    /// The implementation is quite slow, but it's good enough for now.
     /// TODO: Implement a full-text search (FTS5).
     #[instrument(skip(self))]
-    pub fn find_subjects(&self, search: &str) -> Result<Vec<Subject>> {
+    pub fn get_subjects(&self) -> Result<Vec<Subject>> {
         trace!("Begin");
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
             "SELECT id, name
             FROM subjects
-            WHERE instr_lower(name, ?1)
             ORDER BY name",
         )?;
         let subjects = stmt
-            .query_map(params![search], |row| {
+            .query_map(params![], |row| {
                 Ok(Rc::new(SubjectData {
                     id: SubjectId(row.get(0)?),
                     name: row.get(1)?,
@@ -215,7 +222,9 @@ fn setup_tables(conn: &Connection) -> Result<()> {
     )
 }
 
-fn add_compare_function(conn: &Connection) -> Result<()> {
+/// Adds a SQLite function that performs a case-insensitive substring search.
+/// TODO: Currently unused, check later if it's needed.
+fn add_instr_lower(conn: &Connection) -> Result<()> {
     fn instr_lower(haystack: &str, needle: &str) -> bool {
         haystack.to_lowercase().contains(&needle.to_lowercase())
     }

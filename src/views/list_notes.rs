@@ -12,8 +12,15 @@ use std::{collections::BTreeMap, rc::Rc};
 use super::select_subject::SelectSubject;
 use dioxus::html::input_data::keyboard_types::{Key, Modifiers};
 
-pub fn ListNotes(cx: Scope) -> Element {
-    let query = use_note_query(cx).notes();
+#[derive(Props)]
+pub struct ListNotesProps<'a> {
+    #[props(!optional)]
+    pub subject: Option<SubjectId>,
+    pub on_select_subject: EventHandler<'a, SubjectId>,
+}
+
+pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
+    let query = use_note_query(cx, cx.props.subject).notes();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
     let mut groups = BTreeMap::new();
@@ -33,7 +40,12 @@ pub fn ListNotes(cx: Scope) -> Element {
                 nodes
                     .into_iter()
                     .map(|note| {
-                        rsx! { ViewNote { note: note.clone() } }
+                        rsx! { ViewNote {
+                            note: note.clone(),
+                            on_select_subject: |subject: Subject| {
+                                cx.props.on_select_subject.call(subject.id);
+                            },
+                        } }
                     })
                     .collect::<Vec<_>>(),
             )
@@ -48,6 +60,7 @@ pub fn ListNotes(cx: Scope) -> Element {
     let add_note = if show_input.read().0 {
         rsx! {
             NoteInput {
+                subject: cx.props.subject,
                 on_create_note: |_| show_input.write().0 = false,
                 on_cancel: |_| show_input.write().0 = false
             }
@@ -85,15 +98,28 @@ pub fn ListNotes(cx: Scope) -> Element {
     }
 }
 
-#[inline_props]
-fn ViewNote(cx: Scope, note: Note) -> Element {
+#[derive(Props)]
+struct ViewNoteProps<'a> {
+    note: Note,
+    on_select_subject: EventHandler<'a, Subject>,
+}
+
+fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
+    let note = &cx.props.note;
+    let time_text = note.created_at.naive_local().format("%Y-%m-%d %H:%M").to_string();
     cx.render(rsx! {
         div {
             class: "note",
-            SubjectCards { sids: note.subjects.clone() },
+            SubjectCards {
+                sids: note.subjects.clone(),
+                on_click_subject: |subject: Subject| {
+                    cx.props.on_select_subject.call(subject);
+                },
+            },
             div {
                 class: "note-content",
-                "{note.text}",
+                title: "{time_text}",
+                "{cx.props.note.text}",
             },
         }
     })
@@ -147,6 +173,8 @@ fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
 
 #[derive(Props)]
 struct NoteInputProps<'a> {
+    #[props(!optional)]
+    subject: Option<SubjectId>,
     on_create_note: EventHandler<'a, String>,
     on_cancel: EventHandler<'a, ()>,
 }
@@ -161,7 +189,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
 
     let store = use_store(cx);
     let text = use_state(cx, String::new);
-    let subjects = use_ref(cx, Vec::new);
+    let subjects = use_ref(cx, || cx.props.subject.into_iter().collect::<Vec<_>>());
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 

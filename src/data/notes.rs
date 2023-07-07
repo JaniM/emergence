@@ -13,7 +13,8 @@ pub struct NoteData {
     pub id: NoteId,
     pub text: String,
     pub subjects: Vec<SubjectId>,
-    pub created_at: DateTime<Utc>,
+    pub created_at: DateTime<Local>,
 }
 
 pub type Note = Rc<NoteData>;
+

@@ -11,6 +11,7 @@ use super::subjects::{Subject, SubjectId};
 
 pub(super) struct NoteQuerySource {
     pub note_data: Vec<Note>,
+    pub subject: Option<SubjectId>,
     pub update_callback: Arc<dyn Fn()>,
     pub alive: bool,
 }
@@ -29,18 +30,27 @@ impl Debug for NoteQuerySource {
     }
 }
 
-pub fn use_note_query<'a, 'b>(cx: &'a ScopeState) -> &'a NoteQuery {
+pub fn use_note_query<'a, 'b>(cx: &'a ScopeState, subject: Option<SubjectId>) -> &'a NoteQuery {
     let store = use_store(cx).read();
-    cx.use_hook(|| {
+    let query = cx.use_hook(|| {
         let update_callback = cx.schedule_update();
         let source = Rc::new(RefCell::new(NoteQuerySource {
             note_data: Vec::new(),
+            subject,
             update_callback,
             alive: true,
         }));
         store.add_source(source.clone());
         NoteQuery { source }
-    })
+    });
+
+    if query.source.borrow().subject != subject {
+        query.source.borrow_mut().subject = subject;
+        // TODO: Use a finer-grained update
+        store.update_note_sources();
+    }
+
+    query
 }
 
 impl NoteQuery {

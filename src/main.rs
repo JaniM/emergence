@@ -11,7 +11,8 @@ use dioxus::{
     prelude::*,
 };
 use tracing::{metadata::LevelFilter, trace};
-use views::list_notes::ListNotes;
+
+use crate::views::journal::Journal;
 
 fn main() {
     tracing::subscriber::set_global_default(
@@ -69,7 +70,7 @@ fn App(cx: Scope) -> Element {
                     magic_capture_ref.set(Some(e.inner().clone()));
                 },
             }
-            ListNotes { },
+            Journal { },
         }
     }
 }
