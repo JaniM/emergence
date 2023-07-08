@@ -13,9 +13,10 @@ chrono = "0.4.26"
 dioxus = { git = "https://github.com/DioxusLabs/dioxus" }
 dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus" }
 
-rusqlite = { version = "0.29.0", features = ["bundled", "chrono", "functions"] }
+rusqlite = { version = "0.29.0", features = ["bundled", "chrono", "functions", "uuid"] }
 tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
+uuid = { version = "1.4.0", features = ["v4"] }
 
 [package.metadata.bundle]
 name = "Emergence"

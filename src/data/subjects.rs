@@ -1,10 +1,11 @@
 use std::rc::Rc;
 
 use rusqlite::ToSql;
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(transparent)]
-pub struct SubjectId(pub u64);
+pub struct SubjectId(pub Uuid);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SubjectData {
