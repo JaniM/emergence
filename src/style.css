@@ -15,6 +15,17 @@ div, textarea, input, button {
     font-size: medium;
 }
 
+::-webkit-scrollbar {
+    -webkit-appearance: none;
+    width: 7px;
+}
+
+::-webkit-scrollbar-thumb {
+    border-radius: 4px;
+    background-color: rgba(0, 0, 0, .5);
+    -webkit-box-shadow: 0 0 1px rgba(255, 255, 255, .5);
+}
+
 .magic-capture {
     position: fixed;
     top: -10px;
@@ -24,9 +35,8 @@ div, textarea, input, button {
 }
 
 .app {
-    height: calc(100vh - 40px);
+    height: 100vh;
     overflow: hidden;
-    padding: 20px;
 }
 
 .journal {
@@ -125,7 +135,7 @@ div, textarea, input, button {
 .note-subjects {
     position: absolute;
     top: 0;
-    right: 15px;
+    right: 0;
     transform: translateY(-50%);
     width: fit-content;
     height: fit-content;
@@ -153,6 +163,7 @@ div, textarea, input, button {
     white-space: pre-wrap;
     text-align: left;
     font-style: italic;
+    cursor: pointer;
 }
 
 .add-note:hover {
