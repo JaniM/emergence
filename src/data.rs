@@ -111,7 +111,7 @@ impl Store {
     pub fn get_notes(&self, subject: Option<SubjectId>) -> Result<Vec<notes::Note>> {
         trace!("Begin");
         let conn = self.conn.borrow();
-        let mut stmt = conn.prepare_cached(&format!(
+        let mut stmt = conn.prepare_cached(if subject.is_none() {
             r#"SELECT
                 id,
                 text,
@@ -119,15 +119,22 @@ impl Store {
                 as subjects,
                 created_at
             FROM notes
-            {}
+            WHERE ?1 IS NULL
             ORDER BY created_at DESC
-            LIMIT 1000"#,
-            if subject.is_some() {
-                "INNER JOIN notes_subjects ON note_id = notes.id AND subject_id = ?1"
-            } else {
-                "WHERE ?1 IS NULL"
-            }
-        ))?;
+            LIMIT 1000"#
+        } else {
+            r#"SELECT
+                n.id,
+                n.text,
+                (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
+                as subjects,
+                n.created_at
+            FROM notes_search s
+            INNER JOIN notes n ON s.note_id = n.id
+            WHERE s.subject_id = ?1
+            ORDER BY s.created_at DESC
+            LIMIT 1000"#
+        })?;
         let notes = stmt
             .query_map(params![subject], |row| {
                 let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
@@ -216,8 +223,50 @@ fn setup_tables(conn: &Connection) -> Result<()> {
         ) STRICT;
         CREATE INDEX IF NOT EXISTS notes_created_at ON notes (created_at);
         CREATE INDEX IF NOT EXISTS notes_subjects_index ON notes_subjects(subject_id, note_id);
+
+        CREATE TABLE IF NOT EXISTS notes_search (
+            note_id BLOB NOT NULL,
+            subject_id BLOB NOT NULL,
+            created_at INTEGER NOT NULL,
+            PRIMARY KEY (note_id, subject_id),
+            FOREIGN KEY (note_id) REFERENCES notes(id),
+            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+        ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at);
+
+        CREATE TRIGGER IF NOT EXISTS notes_search_insert AFTER INSERT ON notes_subjects BEGIN
+            INSERT INTO notes_search (note_id, subject_id, created_at)
+            VALUES (
+                NEW.note_id,
+                NEW.subject_id,
+                (SELECT created_at FROM notes WHERE id = NEW.note_id)
+            );
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS notes_search_delete AFTER DELETE ON notes_subjects BEGIN
+            DELETE FROM notes_search
+            WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
+        END;
     "#,
-    )
+    )?;
+
+    let search_index_count = conn
+        .prepare_cached("SELECT COUNT(*) FROM notes_search")?
+        .query_row(params![], |row| row.get::<_, i64>(0))?;
+
+    if search_index_count == 0 {
+        conn.execute_batch(
+            r#"
+            INSERT INTO notes_search (note_id, subject_id, created_at)
+            SELECT note_id, subject_id, (SELECT created_at FROM notes WHERE id = note_id)
+            FROM notes_subjects
+            WHERE TRUE
+            ON CONFLICT (note_id, subject_id) DO NOTHING;
+        "#,
+        )?;
+    }
+    Ok(())
 }
 
 fn add_concat_blobs(conn: &Connection) -> Result<()> {
@@ -265,7 +314,8 @@ fn add_concat_blobs(conn: &Connection) -> Result<()> {
 #[allow(dead_code)]
 fn shove_test_data(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction()?;
-    let subject_ids = (1..=5)
+    let subject_xount = 100;
+    let subject_ids = (1..=subject_xount)
         .map(|i| {
             let id = Uuid::new_v4();
             tx.prepare("INSERT INTO subjects (id, name) VALUES (?1, ?2)")?
@@ -273,7 +323,7 @@ fn shove_test_data(conn: &mut Connection) -> Result<()> {
             Ok(SubjectId(id))
         })
         .collect::<Result<Vec<_>>>()?;
-    for i in 0..100000 {
+    for i in 0..1_000_000 {
         let id = Uuid::new_v4();
         tx.prepare(
             "INSERT INTO notes (id, text, created_at)
@@ -282,7 +332,7 @@ fn shove_test_data(conn: &mut Connection) -> Result<()> {
         .execute(params![id, format!("Test Note {}", i), chrono::Utc::now()])?;
         tx.execute(
             "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
-            params![id, subject_ids[i % 5]],
+            params![id, subject_ids[i % subject_xount].0],
         )?;
     }
     tx.commit()?;
