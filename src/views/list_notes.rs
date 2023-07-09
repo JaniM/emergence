@@ -41,6 +41,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
                     .into_iter()
                     .map(|note| {
                         rsx! { ViewNote {
+                            key: "{note.id.0}",
                             note: note.clone(),
                             on_select_subject: |subject: Subject| {
                                 cx.props.on_select_subject.call(subject.id);

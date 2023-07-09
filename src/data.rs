@@ -111,23 +111,23 @@ impl Store {
     pub fn get_notes(&self, subject: Option<SubjectId>) -> Result<Vec<notes::Note>> {
         trace!("Begin");
         let conn = self.conn.borrow();
-        let mut stmt = conn.prepare_cached(
+        let mut stmt = conn.prepare_cached(&format!(
             r#"SELECT
                 id,
                 text,
-                concat_blobs(subject_id) as subjects,
+                (SELECT concat_blobs(subject_id) FROM notes_subjects WHERE note_id = notes.id)
+                as subjects,
                 created_at
             FROM notes
-            LEFT JOIN notes_subjects ON notes.id = notes_subjects.note_id
-            WHERE EXISTS (
-                SELECT 1
-                FROM notes_subjects
-                WHERE note_id = notes.id AND subject_id = ?1
-            ) OR ?1 IS NULL
-            GROUP BY id
+            {}
             ORDER BY created_at DESC
             LIMIT 1000"#,
-        )?;
+            if subject.is_some() {
+                "INNER JOIN notes_subjects ON note_id = notes.id AND subject_id = ?1"
+            } else {
+                "WHERE ?1 IS NULL"
+            }
+        ))?;
         let notes = stmt
             .query_map(params![subject], |row| {
                 let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
@@ -214,6 +214,8 @@ fn setup_tables(conn: &Connection) -> Result<()> {
             FOREIGN KEY (note_id) REFERENCES notes(id),
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
+        CREATE INDEX IF NOT EXISTS notes_created_at ON notes (created_at);
+        CREATE INDEX IF NOT EXISTS notes_subjects_index ON notes_subjects(subject_id, note_id);
     "#,
     )
 }
