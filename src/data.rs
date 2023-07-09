@@ -3,8 +3,8 @@ pub mod query;
 pub mod subjects;
 
 use chrono::TimeZone;
-use rusqlite::functions::{Aggregate, Context, FunctionFlags};
-use rusqlite::{params, Connection, Result};
+use rusqlite::{params, Connection, Result, ToSql};
+use smallvec::SmallVec;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
 use tracing::{instrument, trace};
@@ -29,7 +29,6 @@ impl Store {
     pub fn new() -> Self {
         trace!("Begin");
         let conn = Connection::open("data.db").unwrap();
-        add_instr_lower(&conn).unwrap();
         add_concat_blobs(&conn).unwrap();
         setup_tables(&conn).unwrap();
         let store = Self {
@@ -219,45 +218,36 @@ fn setup_tables(conn: &Connection) -> Result<()> {
     )
 }
 
-/// Adds a SQLite function that performs a case-insensitive substring search.
-/// TODO: Currently unused, check later if it's needed.
-fn add_instr_lower(conn: &Connection) -> Result<()> {
-    fn instr_lower(haystack: &str, needle: &str) -> bool {
-        haystack.to_lowercase().contains(&needle.to_lowercase())
-    }
-
-    conn.create_scalar_function(
-        "instr_lower",
-        2,
-        FunctionFlags::SQLITE_UTF8
-            | FunctionFlags::SQLITE_DETERMINISTIC
-            | FunctionFlags::SQLITE_INNOCUOUS,
-        |ctx| {
-            let haystack = ctx.get::<String>(0)?;
-            let needle = ctx.get::<String>(1)?;
-            Ok(instr_lower(&haystack, &needle))
-        },
-    )
-}
-
 fn add_concat_blobs(conn: &Connection) -> Result<()> {
+    use rusqlite::functions::{Aggregate, Context, FunctionFlags};
     struct ConcatBlobs;
 
+    /// Wrapper around SmallVec to implement ToSql.
+    /// 64 bytes is enough for 4 UUIDs, which I assume is enough for most notes.
+    #[derive(Default)]
+    struct Blob(SmallVec<[u8; 64]>);
+
+    impl ToSql for Blob {
+        fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+            self.0.to_sql()
+        }
+    }
+
     /// TODO: Avoid allocating a Vec for each row, maybe with ArrayVec.
-    impl Aggregate<Vec<u8>, Vec<u8>> for ConcatBlobs {
-        fn init(&self, _ctx: &mut Context<'_>) -> rusqlite::Result<Vec<u8>> {
-            Ok(Vec::new())
+    impl Aggregate<Blob, Blob> for ConcatBlobs {
+        fn init(&self, _ctx: &mut Context<'_>) -> rusqlite::Result<Blob> {
+            Ok(Blob::default())
         }
 
-        fn step(&self, ctx: &mut Context<'_>, result: &mut Vec<u8>) -> rusqlite::Result<()> {
+        fn step(&self, ctx: &mut Context<'_>, result: &mut Blob) -> rusqlite::Result<()> {
             let blob = ctx.get_raw(0).as_blob_or_null()?;
             if let Some(blob) = blob {
-                result.extend_from_slice(blob);
+                result.0.extend_from_slice(blob);
             }
             Ok(())
         }
 
-        fn finalize(&self, _: &mut Context<'_>, result: Option<Vec<u8>>) -> Result<Vec<u8>> {
+        fn finalize(&self, _: &mut Context<'_>, result: Option<Blob>) -> Result<Blob> {
             Ok(result.unwrap_or_default())
         }
     }
