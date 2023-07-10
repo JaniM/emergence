@@ -144,6 +144,9 @@ div, textarea, input, button {
     justify-content: flex-end;
     align-items: center;
     gap: 5px;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
 }
 
 .subject-card {

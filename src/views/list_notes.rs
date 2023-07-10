@@ -61,6 +61,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     let add_note = if show_input.read().0 {
         rsx! {
             NoteInput {
+                key: "input",
                 subject: cx.props.subject,
                 on_create_note: |_| show_input.write().0 = false,
                 on_cancel: |_| show_input.write().0 = false
@@ -69,6 +70,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     } else {
         rsx! {
             button {
+                key: "add-note-button",
                 class: "add-note",
                 onclick: |_| {
                     show_input.write().0 = true;
