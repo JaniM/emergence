@@ -1,10 +1,11 @@
+mod functions;
 pub mod notes;
 pub mod query;
+mod setup;
 pub mod subjects;
 
 use chrono::TimeZone;
-use rusqlite::{params, Connection, Result, ToSql};
-use smallvec::SmallVec;
+use rusqlite::{params, Connection, Result, Row};
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
 use tracing::{instrument, trace};
@@ -19,18 +20,30 @@ use self::subjects::{Subject, SubjectData};
 
 #[derive(Debug)]
 pub struct Store {
-    conn: Rc<RefCell<rusqlite::Connection>>,
+    pub conn: Rc<RefCell<rusqlite::Connection>>,
     note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
     subject_source: Rc<RefCell<SubjectQuerySource>>,
 }
 
+#[derive(Debug, Clone)]
+pub enum ConnectionType {
+    #[allow(dead_code)]
+    InMemory,
+    File(String),
+}
+
 impl Store {
     #[instrument()]
-    pub fn new() -> Self {
+    pub fn new(file: ConnectionType) -> Self {
         trace!("Begin");
-        let conn = Connection::open("data.db").unwrap();
-        add_concat_blobs(&conn).unwrap();
-        setup_tables(&conn).unwrap();
+        let conn = match file {
+            ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
+            ConnectionType::File(path) => Connection::open(path).unwrap(),
+        };
+
+        functions::add_functions(&conn).unwrap();
+        setup::setup_tables(&conn).unwrap();
+
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
             note_sources: Rc::new(RefCell::new(Vec::new())),
@@ -39,8 +52,10 @@ impl Store {
                 update_callback: Vec::new(),
             })),
         };
+
         // shove_test_data(&mut store.conn.borrow_mut()).unwrap();
         store.update_subject_sources();
+
         trace!("Finished");
         store
     }
@@ -110,47 +125,52 @@ impl Store {
     #[instrument(skip(self))]
     pub fn get_notes(&self, subject: Option<SubjectId>) -> Result<Vec<notes::Note>> {
         trace!("Begin");
-        let conn = self.conn.borrow();
-        let mut stmt = conn.prepare_cached(if subject.is_none() {
-            r#"SELECT
-                id,
-                text,
-                (SELECT concat_blobs(subject_id) FROM notes_subjects WHERE note_id = notes.id)
-                as subjects,
-                created_at
-            FROM notes
-            WHERE ?1 IS NULL
-            ORDER BY created_at DESC
-            LIMIT 1000"#
-        } else {
-            r#"SELECT
-                n.id,
-                n.text,
-                (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
-                as subjects,
-                n.created_at
-            FROM notes_search s
-            INNER JOIN notes n ON s.note_id = n.id
-            WHERE s.subject_id = ?1
-            ORDER BY s.created_at DESC
-            LIMIT 1000"#
-        })?;
-        let notes = stmt
-            .query_map(params![subject], |row| {
-                let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
-                let subjects = subjects_blob
-                    .chunks_exact(16)
-                    .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
-                    .collect::<Vec<_>>();
 
-                Ok(Rc::new(notes::NoteData {
-                    id: NoteId(row.get(0)?),
-                    text: row.get(1)?,
-                    subjects,
-                    created_at: chrono::Local.timestamp_opt(row.get(3)?, 0).unwrap(),
-                }))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
+        let row_f = |row: &Row| {
+            let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
+            let subjects = subjects_blob
+                .chunks_exact(16)
+                .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
+                .collect::<Vec<_>>();
+
+            Ok(Rc::new(notes::NoteData {
+                id: NoteId(row.get(0)?),
+                text: row.get(1)?,
+                subjects,
+                created_at: chrono::Local.timestamp_opt(row.get(3)?, 0).unwrap(),
+            }))
+        };
+
+        let conn = self.conn.borrow();
+        let notes = if subject.is_none() {
+            conn.prepare_cached(
+                r#"SELECT
+                    n.id,
+                    n.text,
+                    (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
+                    as subjects,
+                    n.created_at
+                FROM notes n
+                ORDER BY n.created_at DESC
+                LIMIT 1000"#
+            )?.query_map(params![], row_f)?
+            .collect::<Result<Vec<_>, _>>()?
+        } else {
+            conn.prepare_cached(
+                r#"SELECT
+                    n.id,
+                    n.text,
+                    (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
+                    as subjects,
+                    n.created_at
+                FROM notes_search s
+                INNER JOIN notes n ON s.note_id = n.id
+                WHERE s.subject_id = ?1
+                ORDER BY s.created_at DESC
+                LIMIT 1000"#
+            )?.query_map(params![subject], row_f)?
+            .collect::<Result<Vec<_>, _>>()?
+        };
 
         trace!("Finished");
         Ok(notes)
@@ -197,124 +217,29 @@ impl Store {
 
         Ok(Rc::new(SubjectData {
             id: SubjectId(id),
-            name: name.to_string(),
+            name,
         }))
     }
 }
 
-fn setup_tables(conn: &Connection) -> Result<()> {
-    conn.execute_batch(
-        r#"
-        CREATE TABLE IF NOT EXISTS subjects (
-            id BLOB PRIMARY KEY,
-            name TEXT NOT NULL
-        ) STRICT;
-        CREATE TABLE IF NOT EXISTS notes (
-            id BLOB PRIMARY KEY,
-            text TEXT NOT NULL,
-            created_at INTEGER NOT NULL
-        ) STRICT;
-        CREATE TABLE IF NOT EXISTS notes_subjects (
-            note_id BLOB NOT NULL,
-            subject_id BLOB NOT NULL,
-            PRIMARY KEY (note_id, subject_id),
-            FOREIGN KEY (note_id) REFERENCES notes(id),
-            FOREIGN KEY (subject_id) REFERENCES subjects(id)
-        ) STRICT;
-        CREATE INDEX IF NOT EXISTS notes_created_at ON notes (created_at);
-        CREATE INDEX IF NOT EXISTS notes_subjects_index ON notes_subjects(subject_id, note_id);
-
-        CREATE TABLE IF NOT EXISTS notes_search (
-            note_id BLOB NOT NULL,
-            subject_id BLOB NOT NULL,
-            created_at INTEGER NOT NULL,
-            PRIMARY KEY (note_id, subject_id),
-            FOREIGN KEY (note_id) REFERENCES notes(id),
-            FOREIGN KEY (subject_id) REFERENCES subjects(id)
-        ) STRICT;
-
-        CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at);
-
-        CREATE TRIGGER IF NOT EXISTS notes_search_insert AFTER INSERT ON notes_subjects BEGIN
-            INSERT INTO notes_search (note_id, subject_id, created_at)
-            VALUES (
-                NEW.note_id,
-                NEW.subject_id,
-                (SELECT created_at FROM notes WHERE id = NEW.note_id)
-            );
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS notes_search_delete AFTER DELETE ON notes_subjects BEGIN
-            DELETE FROM notes_search
-            WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
-        END;
-    "#,
-    )?;
-
-    let search_index_count = conn
-        .prepare_cached("SELECT COUNT(*) FROM notes_search")?
-        .query_row(params![], |row| row.get::<_, i64>(0))?;
-
-    if search_index_count == 0 {
-        conn.execute_batch(
-            r#"
-            INSERT INTO notes_search (note_id, subject_id, created_at)
-            SELECT note_id, subject_id, (SELECT created_at FROM notes WHERE id = note_id)
-            FROM notes_subjects
-            WHERE TRUE
-            ON CONFLICT (note_id, subject_id) DO NOTHING;
-        "#,
-        )?;
+impl Drop for Store {
+    fn drop(&mut self) {
+        trace!("Optimize database");
+        self.conn
+            .borrow()
+            .execute_batch(
+                r#"
+            pragma optimize;
+            "#,
+            )
+            .unwrap();
     }
-    Ok(())
-}
-
-fn add_concat_blobs(conn: &Connection) -> Result<()> {
-    use rusqlite::functions::{Aggregate, Context, FunctionFlags};
-    struct ConcatBlobs;
-
-    /// Wrapper around SmallVec to implement ToSql.
-    /// 64 bytes is enough for 4 UUIDs, which I assume is enough for most notes.
-    #[derive(Default)]
-    struct Blob(SmallVec<[u8; 64]>);
-
-    impl ToSql for Blob {
-        fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
-            self.0.to_sql()
-        }
-    }
-
-    /// TODO: Avoid allocating a Vec for each row, maybe with ArrayVec.
-    impl Aggregate<Blob, Blob> for ConcatBlobs {
-        fn init(&self, _ctx: &mut Context<'_>) -> rusqlite::Result<Blob> {
-            Ok(Blob::default())
-        }
-
-        fn step(&self, ctx: &mut Context<'_>, result: &mut Blob) -> rusqlite::Result<()> {
-            let blob = ctx.get_raw(0).as_blob_or_null()?;
-            if let Some(blob) = blob {
-                result.0.extend_from_slice(blob);
-            }
-            Ok(())
-        }
-
-        fn finalize(&self, _: &mut Context<'_>, result: Option<Blob>) -> Result<Blob> {
-            Ok(result.unwrap_or_default())
-        }
-    }
-
-    conn.create_aggregate_function(
-        "concat_blobs",
-        1,
-        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
-        ConcatBlobs,
-    )
 }
 
 #[allow(dead_code)]
-fn shove_test_data(conn: &mut Connection) -> Result<()> {
+pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
     let tx = conn.transaction()?;
-    let subject_xount = 100;
+    let subject_xount = 10;
     let subject_ids = (1..=subject_xount)
         .map(|i| {
             let id = Uuid::new_v4();
@@ -323,7 +248,7 @@ fn shove_test_data(conn: &mut Connection) -> Result<()> {
             Ok(SubjectId(id))
         })
         .collect::<Result<Vec<_>>>()?;
-    for i in 0..1_000_000 {
+    for i in 0..10_000 {
         let id = Uuid::new_v4();
         tx.prepare(
             "INSERT INTO notes (id, text, created_at)
@@ -337,4 +262,51 @@ fn shove_test_data(conn: &mut Connection) -> Result<()> {
     }
     tx.commit()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use rusqlite::Result;
+
+    #[test]
+    fn test_note_query_by_subject() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let subject1 = store.add_subject("Test subject 1".to_string())?;
+        let subject2 = store.add_subject("Test subject 2".to_string())?;
+
+        store.add_note("Test note 1".to_string(), vec![subject1.id])?;
+        store.add_note("Test note 2".to_string(), vec![subject2.id])?;
+
+        let notes = store.get_notes(None).unwrap();
+        assert_eq!(notes.len(), 2);
+        assert_eq!(notes[0].text, "Test note 2");
+        assert_eq!(notes[0].subjects, vec![subject2.id]);
+        assert_eq!(notes[1].text, "Test note 1");
+        assert_eq!(notes[1].subjects, vec![subject1.id]);
+
+        let notes = store.get_notes(Some(subject1.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].text, "Test note 1");
+
+        let notes = store.get_notes(Some(subject2.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].text, "Test note 2");
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_subject_query() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        store.add_subject("Test subject 1".to_string())?;
+        store.add_subject("Test subject 2".to_string())?;
+
+        let subjects = store.get_subjects()?;
+        assert_eq!(subjects.len(), 2);
+        assert_eq!(subjects[0].name, "Test subject 1");
+        assert_eq!(subjects[1].name, "Test subject 2");
+
+        Ok(())
+    }
 }

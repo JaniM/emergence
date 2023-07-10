@@ -1,7 +1,8 @@
 #![allow(non_snake_case)]
 
-mod data;
 mod views;
+
+pub use emergence::data;
 
 use std::rc::Rc;
 
@@ -41,7 +42,9 @@ fn main() {
 pub struct ShowInput(pub bool);
 
 fn App(cx: Scope) -> Element {
-    use_shared_state_provider(cx, Store::new);
+    use_shared_state_provider(cx, || {
+        Store::new(data::ConnectionType::File("data.db".into()))
+    });
     use_shared_state_provider(cx, || ShowInput(false));
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
     let magic_capture_ref = use_ref(cx, || None::<Rc<MountedData>>);
@@ -74,8 +77,4 @@ fn App(cx: Scope) -> Element {
             Journal { },
         }
     }
-}
-
-fn use_store(cx: &ScopeState) -> &UseSharedState<data::Store> {
-    use_shared_state(cx).expect("Store context not set")
 }

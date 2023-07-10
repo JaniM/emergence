@@ -19,6 +19,14 @@ tracing = "0.1.37"
 tracing-subscriber = "0.3.17"
 uuid = { version = "1.4.0", features = ["v4"] }
 
+[dev-dependencies]
+criterion = "0.4"
+tempfile = "3.6.0"
+
+[[bench]]
+name = "note_search"
+harness = false
+
 [package.metadata.bundle]
 name = "Emergence"
 identifier = "com.emergence.notes"

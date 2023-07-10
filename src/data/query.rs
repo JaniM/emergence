@@ -1,5 +1,4 @@
 use crate::data::notes::Note;
-use crate::use_store;
 use dioxus::prelude::*;
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
@@ -8,6 +7,10 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use super::subjects::{Subject, SubjectId};
+
+pub fn use_store(cx: &ScopeState) -> &UseSharedState<super::Store> {
+    use_shared_state(cx).expect("Store context not set")
+}
 
 pub(super) struct NoteQuerySource {
     pub note_data: Vec<Note>,

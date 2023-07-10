@@ -1,10 +1,10 @@
 use crate::{
     data::{
         notes::Note,
-        query::{use_note_query, use_subject_query},
+        query::{use_note_query, use_store, use_subject_query},
         subjects::{Subject, SubjectId},
     },
-    use_store, ShowInput,
+    ShowInput,
 };
 use dioxus::prelude::*;
 use std::{collections::BTreeMap, rc::Rc};
@@ -110,7 +110,11 @@ struct ViewNoteProps<'a> {
 
 fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     let note = &cx.props.note;
-    let time_text = note.created_at.naive_local().format("%Y-%m-%d %H:%M").to_string();
+    let time_text = note
+        .created_at
+        .naive_local()
+        .format("%Y-%m-%d %H:%M")
+        .to_string();
     cx.render(rsx! {
         div {
             class: "note",

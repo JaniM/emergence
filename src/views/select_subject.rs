@@ -1,6 +1,5 @@
-use crate::data::query::use_subject_query;
+use crate::data::query::{use_subject_query, use_store};
 use crate::data::subjects::{Subject, SubjectId};
-use crate::use_store;
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
 use tracing::{instrument, trace};
