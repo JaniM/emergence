@@ -60,6 +60,7 @@ fn App(cx: Scope) -> Element {
             });
 
             document.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') return;
                 if (e.target.className === 'magic-capture') return;
                 document
                     .querySelector('.magic-capture')
