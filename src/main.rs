@@ -2,6 +2,8 @@
 
 mod views;
 
+use std::path::PathBuf;
+
 use dioxus_desktop::{use_eval, use_window};
 pub use emergence::data;
 
@@ -10,23 +12,61 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use tracing::{metadata::LevelFilter, trace};
+use tracing::{metadata::LevelFilter, info};
 
 use crate::views::journal::Journal;
 
+use clap::{Parser, ValueEnum};
+
+#[derive(Parser, Debug)]
+#[command(author, version, about)]
+struct Args {
+    #[arg(value_enum, short, long, default_value_t = LogLevel::Info)]
+    verbosity: LogLevel,
+
+    /// The database file to use
+    #[arg(short, long, value_name = "FILE")]
+    db_file: Option<PathBuf>,
+}
+
+#[derive(ValueEnum, Debug, Clone, Copy)]
+enum LogLevel {
+    Trace,
+    Debug,
+    Info,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    fn to_level_filter(&self) -> LevelFilter {
+        match self {
+            LogLevel::Trace => LevelFilter::TRACE,
+            LogLevel::Debug => LevelFilter::DEBUG,
+            LogLevel::Info => LevelFilter::INFO,
+            LogLevel::Warn => LevelFilter::WARN,
+            LogLevel::Error => LevelFilter::ERROR,
+        }
+    }
+}
+
 fn main() {
+    let args = Args::parse();
+    let db_file = args.db_file.unwrap_or_else(|| PathBuf::from("data.db"));
+
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
-            .with_max_level(LevelFilter::TRACE)
+            .with_max_level(args.verbosity.to_level_filter())
             .finish(),
     )
     .unwrap();
 
-    trace!("Starting app");
+    info!("Starting app");
 
     // launch the dioxus app in a webview
-    dioxus_desktop::launch_cfg(
+    dioxus_desktop::launch_with_props(
         App,
+        AppProps { db_file },
         dioxus_desktop::Config::new().with_window(
             dioxus_desktop::WindowBuilder::new()
                 .with_title("Emergence Notes")
@@ -40,10 +80,14 @@ fn main() {
 
 pub struct ShowInput(pub bool);
 
-fn App(cx: Scope) -> Element {
+struct AppProps {
+    db_file: PathBuf,
+}
+
+fn App(cx: Scope<AppProps>) -> Element {
     // TODO: Use a context provider for this
     use_shared_state_provider(cx, || {
-        Store::new(data::ConnectionType::File("data.db".into()))
+        Store::new(data::ConnectionType::File(cx.props.db_file.clone()))
     });
     use_shared_state_provider(cx, || ShowInput(false));
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();

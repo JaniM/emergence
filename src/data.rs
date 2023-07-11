@@ -6,9 +6,10 @@ pub mod subjects;
 
 use chrono::TimeZone;
 use rusqlite::{params, Connection, Result, Row};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
-use tracing::{instrument, trace};
+use tracing::{instrument, trace, info};
 use uuid::Uuid;
 
 use notes::NoteId;
@@ -29,7 +30,7 @@ pub struct Store {
 pub enum ConnectionType {
     #[allow(dead_code)]
     InMemory,
-    File(String),
+    File(PathBuf),
 }
 
 impl Store {
@@ -224,7 +225,7 @@ impl Store {
 
 impl Drop for Store {
     fn drop(&mut self) {
-        trace!("Optimize database");
+        info!("Optimize database");
         self.conn
             .borrow()
             .execute_batch(

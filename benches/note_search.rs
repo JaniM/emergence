@@ -5,7 +5,7 @@ use emergence::data::{shove_test_data, ConnectionType, Store};
 
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("Database");
-    group.sample_size(100);
+    group.sample_size(1000);
     group.noise_threshold(0.05);
 
     let store = Store::new(ConnectionType::InMemory);
