@@ -9,6 +9,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto&display=swap');
 * {
     font-family: 'Roboto', sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    -moz-user-select: none;
 }
 
 div, textarea, input, button {
@@ -128,6 +131,12 @@ div, textarea, input, button {
     white-space: pre-wrap;
 }
 
+.note .note-content {
+    user-select: text;
+    -webkit-user-select: text;
+    -moz-user-select: text;
+}
+
 .note textarea {
     display: block;
     width: 100%;
@@ -150,9 +159,6 @@ div, textarea, input, button {
     justify-content: flex-end;
     align-items: center;
     gap: 5px;
-    user-select: none;
-    -webkit-user-select: none;
-    -moz-user-select: none;
 }
 
 .subject-card {

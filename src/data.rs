@@ -9,7 +9,7 @@ use rusqlite::{params, Connection, Result, Row};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
-use tracing::{instrument, trace, info};
+use tracing::{info, instrument, trace};
 use uuid::Uuid;
 
 use notes::NoteId;
@@ -104,9 +104,13 @@ impl Store {
 
             tx.prepare_cached(
                 "INSERT INTO notes (id, text, created_at)
-                VALUES (?1, ?2, unixepoch(?3))",
+                VALUES (?1, ?2, ?3)",
             )?
-            .execute(params![id, text, chrono::Utc::now()])?;
+            .execute(params![
+                id,
+                text,
+                chrono::Utc::now().naive_utc().timestamp_nanos()
+            ])?;
 
             for subject in subjects {
                 tx.prepare_cached(
@@ -134,11 +138,13 @@ impl Store {
                 .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
                 .collect::<Vec<_>>();
 
+            let timestamp: i64 = row.get(3)?;
+
             Ok(Rc::new(notes::NoteData {
                 id: NoteId(row.get(0)?),
                 text: row.get(1)?,
                 subjects,
-                created_at: chrono::Local.timestamp_opt(row.get(3)?, 0).unwrap(),
+                created_at: chrono::Local.timestamp_nanos(timestamp),
             }))
         };
 
@@ -188,7 +194,7 @@ impl Store {
         let mut stmt = conn.prepare_cached(
             "SELECT id, name
             FROM subjects
-            ORDER BY name",
+            ORDER BY name ASC",
         )?;
         let subjects = stmt
             .query_map(params![], |row| {
@@ -308,6 +314,15 @@ mod test {
         assert_eq!(subjects[0].name, "Test subject 1");
         assert_eq!(subjects[1].name, "Test subject 2");
 
+        Ok(())
+    }
+
+    #[test]
+    fn cant_add_duplicate_subject() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let name = "Test subject 1".to_string();
+        store.add_subject(name.clone())?;
+        assert!(store.add_subject(name).is_err());
         Ok(())
     }
 }

@@ -5,7 +5,7 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         r#"
         CREATE TABLE IF NOT EXISTS subjects (
             id BLOB PRIMARY KEY,
-            name TEXT NOT NULL
+            name TEXT NOT NULL UNIQUE
         ) STRICT;
         CREATE TABLE IF NOT EXISTS notes (
             id BLOB PRIMARY KEY,
