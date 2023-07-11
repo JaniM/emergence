@@ -106,6 +106,33 @@ impl Store {
     }
 
     #[instrument(skip(self))]
+    pub fn delete_note(&self, note: NoteId) -> rusqlite::Result<()> {
+        trace!("Deleting note");
+        {
+            let mut conn = self.conn.borrow_mut();
+            let tx = conn.transaction()?;
+
+            tx.prepare_cached(
+                "DELETE FROM notes_subjects
+                WHERE note_id = ?1",
+            )?
+            .execute(params![note.0])?;
+
+            tx.prepare_cached(
+                "DELETE FROM notes
+                WHERE id = ?1",
+            )?
+            .execute(params![note.0])?;
+
+            tx.commit()?;
+        }
+
+        self.update_note_sources();
+
+        Ok(())
+    }
+
+    #[instrument(skip(self))]
     pub fn get_notes(&self, subject: Option<SubjectId>) -> rusqlite::Result<Vec<Note>> {
         trace!("Begin");
 

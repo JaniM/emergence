@@ -1,7 +1,7 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
     notes::Note,
-    query::use_subject_query,
+    query::{use_store, use_subject_query},
     subjects::{Subject, SubjectId},
 };
 use tracing::debug;
@@ -21,6 +21,8 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         Dropdown(f64, f64),
         Edit,
     }
+
+    let store = use_store(cx);
 
     let state = use_state(cx, || State::Normal);
 
@@ -48,11 +50,20 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         }
     };
 
+    // TODO: Add a confirmation dialog
+    let delete = {
+        let note = note.clone();
+        move |_| {
+            store.read().delete_note(note.id).unwrap();
+        }
+    };
+
     let dropdown = if let State::Dropdown(x, y) = *state.get() {
         Some(rsx! {
             Dropdown {
                 pos: (x, y),
                 on_edit: |_| state.set(State::Edit),
+                on_delete: delete,
                 on_close: |_| state.set(State::Normal),
             }
         })
@@ -101,6 +112,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
 struct DropdownProps<'a> {
     pos: (f64, f64),
     on_edit: EventHandler<'a, ()>,
+    on_delete: EventHandler<'a, ()>,
     on_close: EventHandler<'a, ()>,
 }
 
@@ -118,6 +130,11 @@ fn Dropdown<'a>(cx: Scope<'a, DropdownProps<'a>>) -> Element<'a> {
                 class: "note-dropdown-item",
                 onclick: |_| cx.props.on_edit.call(()),
                 "Edit"
+            },
+            div {
+                class: "note-dropdown-item",
+                onclick: |_| cx.props.on_delete.call(()),
+                "Delete"
             },
         }
     })

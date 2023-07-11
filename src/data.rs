@@ -203,4 +203,37 @@ mod test {
 
         Ok(())
     }
+
+    #[test]
+    fn test_delete_note() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let subject1 = store.add_subject("Test subject 1".to_string())?;
+        let subject2 = store.add_subject("Test subject 2".to_string())?;
+
+        let note1 = store.add_note("Test note 1".to_string(), vec![subject1.id])?;
+        let note2 = store.add_note("Test note 2".to_string(), vec![subject1.id])?;
+
+        store.delete_note(note1.id)?;
+
+        let notes = store.get_notes(None).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        assert_eq!(notes[0].text, "Test note 2");
+        assert_eq!(notes[0].subjects, vec![subject1.id]);
+        assert!(notes[0].modified_at == notes[0].created_at);
+
+        let notes = store.get_notes(Some(subject1.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].text, "Test note 2");
+
+        let notes = store.get_notes(Some(subject2.id)).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        store.delete_note(note2.id)?;
+
+        let notes = store.get_notes(None).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        Ok(())
+    }
 }
