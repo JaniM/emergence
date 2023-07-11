@@ -33,9 +33,9 @@ pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         NoteInput {
-            subject: cx.props.subject,
             on_create_note: on_create_note,
             on_cancel: |_| cx.props.on_cancel.call(()),
+            initial_subjects: cx.props.subject.into_iter().collect(),
         }
     })
 }
@@ -69,21 +69,20 @@ pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         NoteInput {
-            subject: None,
             on_create_note: on_create_note,
             on_cancel: on_done,
             initial_text: cx.props.note.text.clone(),
+            initial_subjects: cx.props.note.subjects.clone(),
         }
     })
 }
 
 #[derive(Props)]
 struct NoteInputProps<'a> {
-    #[props(!optional)]
-    subject: Option<SubjectId>,
     on_create_note: EventHandler<'a, (String, Vec<SubjectId>)>,
     on_cancel: EventHandler<'a, ()>,
     initial_text: Option<String>,
+    initial_subjects: Vec<SubjectId>,
 }
 
 fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
@@ -96,7 +95,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
 
     // TODO: Combine these states.
     let text = use_state(cx, || cx.props.initial_text.clone().unwrap_or_default());
-    let subjects = use_ref(cx, || cx.props.subject.into_iter().collect::<Vec<_>>());
+    let subjects = use_ref(cx, || cx.props.initial_subjects.clone());
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 

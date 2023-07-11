@@ -12,7 +12,7 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use tracing::{metadata::LevelFilter, info};
+use tracing::{info, metadata::LevelFilter};
 
 use crate::views::journal::Journal;
 
@@ -67,14 +67,16 @@ fn main() {
     dioxus_desktop::launch_with_props(
         App,
         AppProps { db_file },
-        dioxus_desktop::Config::new().with_window(
-            dioxus_desktop::WindowBuilder::new()
-                .with_title("Emergence Notes")
-                .with_resizable(true)
-                .with_inner_size(dioxus_desktop::wry::application::dpi::LogicalSize::new(
-                    1200.0, 800.0,
-                )),
-        ),
+        dioxus_desktop::Config::new()
+            .with_disable_context_menu(true)
+            .with_window(
+                dioxus_desktop::WindowBuilder::new()
+                    .with_title("Emergence Notes")
+                    .with_resizable(true)
+                    .with_inner_size(dioxus_desktop::wry::application::dpi::LogicalSize::new(
+                        1200.0, 800.0,
+                    )),
+            ),
     );
 }
 
