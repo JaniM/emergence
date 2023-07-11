@@ -93,11 +93,17 @@ div, textarea, input, button {
 
 .note-grid {
     display: grid;
+    grid-template-columns: 1fr;
+    grid-gap: 10px;
+}
+
+.note-grid .group-wrapper {
+    display: grid;
     grid-template-columns: 100px 1fr;
     grid-gap: 10px;
 }
 
-.note-grid .date {
+.group-wrapper .date {
     font-weight: bold;
     text-align: right;
     color: #666;
@@ -105,7 +111,7 @@ div, textarea, input, button {
     border-right: 1px solid #ccc;
 }
 
-.note-grid .group {
+.group-wrapper .group {
     display: grid;
     grid-template-columns: 1fr;
     grid-gap: 10px;

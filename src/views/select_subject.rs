@@ -18,6 +18,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
 
     let subjects = use_subject_query(cx).subjects();
 
+    // TODO: Add semantic sorting
     let subjects = use_memo(
         cx,
         (&cx.props.ignore_subjects, &*subjects, search),
@@ -73,6 +74,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
                             let subject2 = subject.clone();
                             rsx! {
                                 div {
+                                    key: "{subject.id}",
                                     tabindex: 0,
                                     onclick: move |_| {
                                         cx.props.on_select.call(subject.clone());

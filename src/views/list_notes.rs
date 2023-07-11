@@ -90,12 +90,16 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
                 groups.into_iter().map(|(date, nodes)| {
                     rsx! {
                         div {
-                            class: "date",
-                            r#"{date.format("%Y-%m-%d")}"#
-                        },
-                        div {
-                            class: "group",
-                            nodes.into_iter()
+                            key: "{date.format(\"%Y-%m-%d\")}",
+                            class: "group-wrapper",
+                            div {
+                                class: "date",
+                                r#"{date.format("%Y-%m-%d")}"#
+                            },
+                            div {
+                                class: "group",
+                                nodes.into_iter()
+                            }
                         }
                     }
                 })
@@ -153,6 +157,7 @@ fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
             let on_click_subject = &cx.props.on_click_subject;
             rsx! {
                 div {
+                    key: "{s.id.0}",
                     class: "subject-card",
                     onclick: move |_| {
                         if let Some(on_click_subject) = on_click_subject {
@@ -167,6 +172,7 @@ fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
     if let Some(on_add_subject) = &cx.props.on_add_subject {
         cards.push(rsx! {
             div {
+                key: "add-subject",
                 class: "subject-card",
                 onclick: |_| on_add_subject.call(()),
                 "+"
