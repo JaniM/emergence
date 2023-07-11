@@ -3,7 +3,7 @@ use crate::{
         query::use_note_query,
         subjects::{Subject, SubjectId},
     },
-    views::{note_input::NoteInput, view_note::ViewNote},
+    views::{note_input::CreateNote, view_note::ViewNote},
     ShowInput,
 };
 use dioxus::prelude::*;
@@ -57,7 +57,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
 
     let add_note = if show_input.read().0 {
         rsx! {
-            NoteInput {
+            CreateNote {
                 key: "input",
                 subject: cx.props.subject,
                 on_create_note: |_| show_input.write().0 = false,

@@ -1,4 +1,4 @@
-use std::rc::Rc;
+use std::{ops::Deref, rc::Rc};
 
 use crate::{
     data::{
@@ -11,16 +11,82 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
+use emergence::data::notes::{Note, NoteData};
 
 #[derive(Props)]
-pub struct NoteInputProps<'a> {
+pub struct CreateNoteProps<'a> {
     #[props(!optional)]
     subject: Option<SubjectId>,
     on_create_note: EventHandler<'a, String>,
     on_cancel: EventHandler<'a, ()>,
 }
 
-pub fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
+pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
+    let store = use_store(cx);
+
+    let on_create_note = |(text, subjects): (String, Vec<SubjectId>)| {
+        if !text.is_empty() {
+            store.read().add_note(text.clone(), subjects).unwrap();
+        }
+        cx.props.on_create_note.call(text);
+    };
+
+    cx.render(rsx! {
+        NoteInput {
+            subject: cx.props.subject,
+            on_create_note: on_create_note,
+            on_cancel: |_| cx.props.on_cancel.call(()),
+        }
+    })
+}
+
+#[derive(Props)]
+pub struct EditNoteProps<'a> {
+    note: Note,
+    on_done: EventHandler<'a, ()>,
+}
+
+pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
+    let store = use_store(cx);
+
+    let on_done = move |_| {
+        cx.props.on_done.call(());
+    };
+
+    let on_create_note = {
+        let note = cx.props.note.clone();
+        move |(text, subjects): (String, Vec<SubjectId>)| {
+            let new_note = NoteData {
+                text: text.clone(),
+                subjects: subjects,
+                ..note.deref().clone()
+            }
+            .to_note();
+            store.write().update_note(new_note).unwrap();
+            cx.props.on_done.call(());
+        }
+    };
+
+    cx.render(rsx! {
+        NoteInput {
+            subject: None,
+            on_create_note: on_create_note,
+            on_cancel: on_done,
+            initial_text: cx.props.note.text.clone(),
+        }
+    })
+}
+
+#[derive(Props)]
+struct NoteInputProps<'a> {
+    #[props(!optional)]
+    subject: Option<SubjectId>,
+    on_create_note: EventHandler<'a, (String, Vec<SubjectId>)>,
+    on_cancel: EventHandler<'a, ()>,
+    initial_text: Option<String>,
+}
+
+fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     #[derive(PartialEq, Eq, Clone, Copy)]
     enum ShowSubjects {
         No,
@@ -28,23 +94,21 @@ pub fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
         YesMouse,
     }
 
-    let store = use_store(cx);
-    let text = use_state(cx, String::new);
+    // TODO: Combine these states.
+    let text = use_state(cx, || cx.props.initial_text.clone().unwrap_or_default());
     let subjects = use_ref(cx, || cx.props.subject.into_iter().collect::<Vec<_>>());
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 
+    // TODO: Calculate rows based on horizontal overflow too.
+    // I guess there should be a nice way to do it with javascript.
     let rows = text.matches("\n").count() as i64 + 1;
 
     let onkeypress = |e: KeyboardEvent| match e.key() {
         Key::Enter if e.modifiers().contains(Modifiers::CONTROL) => {
-            if !text.is_empty() {
-                store
-                    .read()
-                    .add_note(text.get().clone(), subjects.read().clone())
-                    .unwrap();
-            }
-            cx.props.on_create_note.call(text.get().clone());
+            cx.props
+                .on_create_note
+                .call((text.get().clone(), subjects.read().clone()));
             text.set(String::new());
         }
         Key::Escape => {

@@ -4,20 +4,17 @@ pub mod query;
 mod setup;
 pub mod subjects;
 
-use chrono::TimeZone;
-use rusqlite::{params, Connection, Result, Row};
+use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
 use tracing::{info, instrument, trace};
 use uuid::Uuid;
 
-use notes::NoteId;
 use query::NoteQuerySource;
 use subjects::SubjectId;
 
 use self::query::SubjectQuerySource;
-use self::subjects::{Subject, SubjectData};
 
 #[derive(Debug)]
 pub struct Store {
@@ -60,173 +57,6 @@ impl Store {
         trace!("Finished");
         store
     }
-
-    #[instrument(skip_all)]
-    pub(self) fn add_source(&self, source: Rc<RefCell<NoteQuerySource>>) {
-        trace!("Adding note source");
-        let subject = source.borrow().subject;
-        source.borrow_mut().note_data = self.get_notes(subject).unwrap();
-        self.note_sources.borrow_mut().push(source);
-    }
-
-    #[instrument(skip(self))]
-    fn update_note_sources(&self) {
-        let mut sources = self.note_sources.borrow_mut();
-        sources.retain(|s| s.borrow().alive);
-        for source in sources.iter() {
-            let mut source = source.borrow_mut();
-            source.note_data = self.get_notes(source.subject).unwrap();
-            (source.update_callback)();
-        }
-    }
-
-    #[instrument(skip(self))]
-    fn update_subject_sources(&self) {
-        let subjects = self.get_subjects().unwrap();
-        let subjects = subjects
-            .into_iter()
-            .map(|s| (s.id, s))
-            .collect::<HashMap<_, _>>();
-        let mut source = self.subject_source.borrow_mut();
-        source.subjects = subjects;
-        for callback in source.update_callback.iter() {
-            callback();
-        }
-    }
-
-    #[instrument(skip(self))]
-    pub fn add_note(&self, text: String, subjects: Vec<SubjectId>) -> Result<NoteId> {
-        trace!("Adding note");
-        let id = Uuid::new_v4();
-        {
-            let mut conn = self.conn.borrow_mut();
-            let tx = conn.transaction()?;
-
-            tx.prepare_cached(
-                "INSERT INTO notes (id, text, created_at)
-                VALUES (?1, ?2, ?3)",
-            )?
-            .execute(params![
-                id,
-                text,
-                chrono::Utc::now().naive_utc().timestamp_nanos()
-            ])?;
-
-            for subject in subjects {
-                tx.prepare_cached(
-                    "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
-                )?
-                .execute(params![id, subject.0])?;
-            }
-
-            tx.commit()?;
-        }
-
-        self.update_note_sources();
-
-        Ok(NoteId(id))
-    }
-
-    #[instrument(skip(self))]
-    pub fn get_notes(&self, subject: Option<SubjectId>) -> Result<Vec<notes::Note>> {
-        trace!("Begin");
-
-        let row_f = |row: &Row| {
-            let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
-            let subjects = subjects_blob
-                .chunks_exact(16)
-                .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
-                .collect::<Vec<_>>();
-
-            let timestamp: i64 = row.get(3)?;
-
-            Ok(Rc::new(notes::NoteData {
-                id: NoteId(row.get(0)?),
-                text: row.get(1)?,
-                subjects,
-                created_at: chrono::Local.timestamp_nanos(timestamp),
-            }))
-        };
-
-        let conn = self.conn.borrow();
-        let notes = if subject.is_none() {
-            conn.prepare_cached(
-                r#"SELECT
-                    n.id,
-                    n.text,
-                    (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
-                    as subjects,
-                    n.created_at
-                FROM notes n
-                ORDER BY n.created_at DESC
-                LIMIT 1000"#
-            )?.query_map(params![], row_f)?
-            .collect::<Result<Vec<_>, _>>()?
-        } else {
-            conn.prepare_cached(
-                r#"SELECT
-                    n.id,
-                    n.text,
-                    (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
-                    as subjects,
-                    n.created_at
-                FROM notes_search s
-                INNER JOIN notes n ON s.note_id = n.id
-                WHERE s.subject_id = ?1
-                ORDER BY s.created_at DESC
-                LIMIT 1000"#
-            )?.query_map(params![subject], row_f)?
-            .collect::<Result<Vec<_>, _>>()?
-        };
-
-        trace!("Finished");
-        Ok(notes)
-    }
-
-    /// Finds subjects that match the given search string.
-    /// The search is case-insensitive and matches substrings.
-    /// The results are sorted alphabetically.
-    /// TODO: Implement a full-text search (FTS5).
-    #[instrument(skip(self))]
-    pub fn get_subjects(&self) -> Result<Vec<Subject>> {
-        trace!("Begin");
-        let conn = self.conn.borrow();
-        let mut stmt = conn.prepare_cached(
-            "SELECT id, name
-            FROM subjects
-            ORDER BY name ASC",
-        )?;
-        let subjects = stmt
-            .query_map(params![], |row| {
-                Ok(Rc::new(SubjectData {
-                    id: SubjectId(row.get(0)?),
-                    name: row.get(1)?,
-                }))
-            })?
-            .collect::<Result<Vec<_>, _>>()?;
-        trace!("Finished");
-        Ok(subjects)
-    }
-
-    #[instrument(skip(self))]
-    pub fn add_subject(&mut self, name: String) -> Result<Subject> {
-        trace!("Adding subject");
-        let id = Uuid::new_v4();
-        self.conn
-            .borrow()
-            .prepare_cached(
-                "INSERT INTO subjects (id, name)
-                VALUES (?1, ?2)",
-            )?
-            .execute(params![id, name])?;
-
-        self.update_subject_sources();
-
-        Ok(Rc::new(SubjectData {
-            id: SubjectId(id),
-            name,
-        }))
-    }
 }
 
 impl Drop for Store {
@@ -258,10 +88,14 @@ pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
     for i in 0..10_000 {
         let id = Uuid::new_v4();
         tx.prepare(
-            "INSERT INTO notes (id, text, created_at)
-            VALUES (?1, ?2, unixepoch(?3))",
+            "INSERT INTO notes (id, text, created_at, modified_at)
+            VALUES (?1, ?2, ?3, ?3)",
         )?
-        .execute(params![id, format!("Test Note {}", i), chrono::Utc::now()])?;
+        .execute(params![
+            id,
+            format!("Test Note {}", i),
+            chrono::Local::now().naive_utc().timestamp_nanos()
+        ])?;
         tx.execute(
             "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
             params![id, subject_ids[i % subject_xount].0],
@@ -273,6 +107,10 @@ pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
 
 #[cfg(test)]
 mod test {
+    use std::ops::Deref;
+
+    use crate::data::notes::NoteData;
+
     use super::*;
     use rusqlite::Result;
 
@@ -323,6 +161,46 @@ mod test {
         let name = "Test subject 1".to_string();
         store.add_subject(name.clone())?;
         assert!(store.add_subject(name).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn test_edit_note() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let subject1 = store.add_subject("Test subject 1".to_string())?;
+        let subject2 = store.add_subject("Test subject 2".to_string())?;
+
+        let note1 = store.add_note("Test note 1".to_string(), vec![subject1.id])?;
+        let _note2 = store.add_note("Test note 2".to_string(), vec![subject1.id])?;
+
+        let modified_note1 = NoteData {
+            text: "Test note 1 modified".to_string(),
+            subjects: vec![subject2.id],
+            ..note1.deref().clone()
+        }
+        .to_note();
+
+        store.update_note(modified_note1)?;
+
+        let notes = store.get_notes(None).unwrap();
+        assert_eq!(notes.len(), 2);
+
+        assert_eq!(notes[0].text, "Test note 2");
+        assert_eq!(notes[0].subjects, vec![subject1.id]);
+        assert!(notes[0].modified_at == notes[0].created_at);
+
+        assert_eq!(notes[1].text, "Test note 1 modified");
+        assert!(notes[1].modified_at > notes[1].created_at);
+        assert_eq!(notes[1].subjects, vec![subject2.id]);
+
+        let notes = store.get_notes(Some(subject1.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].text, "Test note 2");
+
+        let notes = store.get_notes(Some(subject2.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        assert_eq!(notes[0].text, "Test note 1 modified");
+
         Ok(())
     }
 }

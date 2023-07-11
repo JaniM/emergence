@@ -12,6 +12,7 @@ pub struct ViewNoteProps<'a> {
 }
 
 pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
+    // PUZZLE: Set up a right click menu and edit button
     let note = &cx.props.note;
     let time_text = note
         .created_at

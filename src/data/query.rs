@@ -1,11 +1,13 @@
 use crate::data::notes::Note;
 use dioxus::prelude::*;
+use tracing::{instrument, trace};
 use std::cell::{Ref, RefCell};
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use super::Store;
 use super::subjects::{Subject, SubjectId};
 
 pub fn use_store(cx: &ScopeState) -> &UseSharedState<super::Store> {
@@ -43,7 +45,7 @@ pub fn use_note_query<'a, 'b>(cx: &'a ScopeState, subject: Option<SubjectId>) ->
             update_callback,
             alive: true,
         }));
-        store.add_source(source.clone());
+        store.add_note_source(source.clone());
         NoteQuery { source }
     });
 
@@ -124,5 +126,40 @@ impl Drop for SubjectQuery {
         source
             .update_callback
             .retain(|cb| Arc::ptr_eq(cb, &self.update_callback));
+    }
+}
+
+impl Store {
+    #[instrument(skip_all)]
+    fn add_note_source(&self, source: Rc<RefCell<NoteQuerySource>>) {
+        trace!("Adding note source");
+        let subject = source.borrow().subject;
+        source.borrow_mut().note_data = self.get_notes(subject).unwrap();
+        self.note_sources.borrow_mut().push(source);
+    }
+
+    #[instrument(skip(self))]
+    pub(super) fn update_note_sources(&self) {
+        let mut sources = self.note_sources.borrow_mut();
+        sources.retain(|s| s.borrow().alive);
+        for source in sources.iter() {
+            let mut source = source.borrow_mut();
+            source.note_data = self.get_notes(source.subject).unwrap();
+            (source.update_callback)();
+        }
+    }
+
+    #[instrument(skip(self))]
+    pub(super) fn update_subject_sources(&self) {
+        let subjects = self.get_subjects().unwrap();
+        let subjects = subjects
+            .into_iter()
+            .map(|s| (s.id, s))
+            .collect::<HashMap<_, _>>();
+        let mut source = self.subject_source.borrow_mut();
+        source.subjects = subjects;
+        for callback in source.update_callback.iter() {
+            callback();
+        }
     }
 }

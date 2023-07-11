@@ -3,15 +3,22 @@ use rusqlite::{params, Connection, Result};
 pub fn setup_tables(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         r#"
+        PRAGMA foreign_keys = ON;
+
         CREATE TABLE IF NOT EXISTS subjects (
             id BLOB PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
         ) STRICT;
+
         CREATE TABLE IF NOT EXISTS notes (
             id BLOB PRIMARY KEY,
             text TEXT NOT NULL,
-            created_at INTEGER NOT NULL
+            created_at INTEGER NOT NULL,
+            modified_at INTEGER NOT NULL
         ) STRICT;
+
+        CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
+
         CREATE TABLE IF NOT EXISTS notes_subjects (
             note_id BLOB NOT NULL,
             subject_id BLOB NOT NULL,

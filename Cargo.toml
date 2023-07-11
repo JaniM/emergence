@@ -9,6 +9,7 @@ description = "Takes notes"
 [dependencies]
 chrono = "0.4.26"
 clap = { version = "4.3.11", features = ["derive"] }
+const_format = "0.2.31"
 
 # using master branch for global hotkeys
 dioxus = { git = "https://github.com/DioxusLabs/dioxus" }

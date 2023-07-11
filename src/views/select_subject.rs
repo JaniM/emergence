@@ -43,6 +43,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
             }
 
             if e.key() == Key::Enter {
+                // TODO: Only use first subject if it's an exact match
                 let subject = if let Some(subject) = subjects.first() {
                     subject.clone()
                 } else {
