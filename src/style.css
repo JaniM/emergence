@@ -106,12 +106,17 @@ div, textarea, input, button {
     grid-gap: 10px;
 }
 
-.group-wrapper .date {
+.group-wrapper .date-wrapper {
     font-weight: bold;
     text-align: right;
     color: #666;
     padding: 5px;
     border-right: 1px solid #ccc;
+}
+
+.group-wrapper .date {
+    position: sticky;
+    top: 15px;
 }
 
 .group-wrapper .group {

@@ -85,13 +85,17 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
             div {
                 class: "note-grid",
                 groups.into_iter().map(|(date, nodes)| {
+                    let date_string = date.format("%Y-%m-%d");
                     rsx! {
                         div {
-                            key: "{date.format(\"%Y-%m-%d\")}",
+                            key: "{date_string}",
                             class: "group-wrapper",
                             div {
-                                class: "date",
-                                r#"{date.format("%Y-%m-%d")}"#
+                                class: "date-wrapper",
+                                div {
+                                    class: "date",
+                                    "{date_string}"
+                                }
                             },
                             div {
                                 class: "group",
