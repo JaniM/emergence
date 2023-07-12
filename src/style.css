@@ -125,7 +125,6 @@ div, textarea, input, button {
     position: relative;
     display: flex;
     flex-flow: row;
-    gap: 5px;
     border: 1px solid #ccc;
     background-color: #eee;
 }
@@ -136,6 +135,10 @@ div, textarea, input, button {
     height: fit-content;
     padding: 5px;
     white-space: pre-wrap;
+}
+
+.task-button-place {
+    width: 17px;
 }
 
 .task-button {
@@ -150,16 +153,14 @@ div, textarea, input, button {
     cursor: pointer;
 }
 
-.task-button.not-a-task {
-    background-color: #eee;
-}
-
 .task-button.todo {
-    background-color: #aaa;
+    /* nice light blue */
+    background-color: rgb(130, 200, 255);
 }
 
 .task-button.done {
-    background-color: #7c3;
+    /* uninteresting gray */
+    background-color: #aaa;
 }
 
 .note .note-content {
@@ -192,6 +193,7 @@ div, textarea, input, button {
     justify-content: flex-end;
     align-items: center;
     gap: 5px;
+    z-index: 2;
 }
 
 .subject-card {
@@ -231,7 +233,7 @@ div, textarea, input, button {
 }
 
 .relative {
-    z-index: 1;
+    z-index: 10;
     height: 0;
 }
 
@@ -274,7 +276,7 @@ div, textarea, input, button {
 
 .note-dropdown {
     position: absolute;
-    z-index: 1;
+    z-index: 2;
     border: 1px solid #ccc;
     background-color: #ddd;
     display: grid;

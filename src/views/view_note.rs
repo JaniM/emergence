@@ -95,7 +95,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     };
 
     let task_button = match cx.props.note.task_state {
-        TaskState::NotATask => rsx! { div { } },
+        TaskState::NotATask => rsx! { div { class: "task-button-place" } },
         TaskState::Todo => rsx! {
             div {
                 class: "task-button todo",
@@ -118,6 +118,26 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         },
     };
 
+    // Overlay for done notes
+    let overlay = if cx.props.note.task_state == TaskState::Done {
+        Some(rsx! {
+            div {
+                style: "
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    width: 100%;
+                    height: 100%;
+                    background-color: rgba(255, 255, 255, 0.5);
+                    z-index: 1;
+                    pointer-events: none;
+                "
+            }
+        })
+    } else {
+        None
+    };
+
     let content = if *state.get() == State::Edit {
         rsx! {
             EditNote {
@@ -138,10 +158,11 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 task_button,
                 div {
                     class: "note",
+                    onmousedown: on_mousedown,
+                    overlay,
                     div {
                         class: "note-content",
                         title: "{time_text}",
-                        onmousedown: on_mousedown,
                         "{text}",
                     },
                 },
