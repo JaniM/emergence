@@ -103,15 +103,22 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     // I guess there should be a nice way to do it with javascript.
     let rows = text.matches("\n").count() as i64 + 1;
 
-    let onkeypress = |e: KeyboardEvent| match e.key() {
+    let submit = || {
+        cx.props
+            .on_create_note
+            .call((text.get().clone(), subjects.read().clone()));
+    };
+
+    let cancel = || {
+        cx.props.on_cancel.call(());
+    };
+
+    let onkeypress = move |e: KeyboardEvent| match e.key() {
         Key::Enter if e.modifiers().contains(Modifiers::CONTROL) => {
-            cx.props
-                .on_create_note
-                .call((text.get().clone(), subjects.read().clone()));
-            text.set(String::new());
+            submit();
         }
         Key::Escape => {
-            cx.props.on_cancel.call(());
+            cancel();
         }
         Key::Character(c) if c == "@" && *show_subjects.get() == ShowSubjects::No => {
             show_subjects.set(ShowSubjects::YesKeyboard);
@@ -133,7 +140,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         div {
-            class: "note note-row",
+            class: "note-row",
             SubjectCards {
                 sids: subjects.read().clone(),
                 on_add_subject: |_| show_subjects.set(ShowSubjects::YesMouse),
@@ -143,7 +150,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                 },
             },
             div {
-                class: "note-content",
+                class: "note-content note",
                 textarea {
                     rows: rows,
                     value: "{text}",
@@ -155,6 +162,23 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                     onkeypress: onkeypress,
                 }
             },
+            div {
+                class: "note-actions",
+                div {
+                    class: "row",
+                    style: "gap: 0",
+                    div {
+                        class: "note-action",
+                        onclick: move |_| submit(),
+                        "Save"
+                    }
+                    div {
+                        class: "note-action",
+                        onclick: move |_| cancel(),
+                        "Cancel"
+                    }
+                }
+            }
             if *show_subjects.get() != ShowSubjects::No {
                 rsx! {
                     SelectSubject {
