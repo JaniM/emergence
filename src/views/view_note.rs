@@ -122,20 +122,23 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     let overlay = if cx.props.note.task_state == TaskState::Done {
         Some(rsx! {
             div {
-                style: "
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    width: 100%;
-                    height: 100%;
-                    background-color: rgba(255, 255, 255, 0.5);
-                    z-index: 1;
-                    pointer-events: none;
-                "
+                class: "note-overlay",
+                style: "background-color: rgba(255, 255, 255, 0.5);"
             }
         })
     } else {
         None
+    };
+    let overlay = if let State::Dropdown { .. } = *state.get() {
+        Some(rsx! {
+            overlay,
+            div {
+                class: "note-overlay",
+                style: "background-color: rgba(200, 200, 255, 0.3);"
+            }
+        })
+    } else {
+        overlay
     };
 
     let content = if *state.get() == State::Edit {
