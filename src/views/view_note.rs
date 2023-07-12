@@ -135,6 +135,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                         cx.props.on_select_subject.call(subject);
                     },
                 },
+                task_button,
                 div {
                     class: "note",
                     div {
@@ -144,10 +145,6 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                         "{text}",
                     },
                 },
-                div {
-                    class: "task-button-wrapper",
-                    task_button,
-                }
                 dropdown
             }
         }
