@@ -33,12 +33,11 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         .format("%Y-%m-%d %H:%M")
         .to_string();
 
-    let on_click = {
+    let on_mousedown = {
         let state = state.clone();
         move |e: MouseEvent| {
             debug!("Clicked: {:?}", e.trigger_button());
-            // TODO: Change this to a right click
-            if e.trigger_button() != Some(MouseButton::Primary) {
+            if e.trigger_button() != Some(MouseButton::Secondary) {
                 return;
             }
             let coord = e.element_coordinates();
@@ -97,7 +96,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 div {
                     class: "note-content",
                     title: "{time_text}",
-                    onclick: on_click,
+                    onmousedown: on_mousedown,
                     "{text}",
                 },
                 dropdown
