@@ -1,24 +1,18 @@
 use crate::{
-    data::{
-        query::use_note_query,
-        subjects::{Subject, SubjectId},
-    },
-    views::{note_input::CreateNote, view_note::ViewNote},
+    data::{query::use_note_query, subjects::Subject},
+    views::{journal::SelectedSubject, note_input::CreateNote, view_note::ViewNote},
     ShowInput,
 };
 use dioxus::prelude::*;
 use std::collections::BTreeMap;
+use tracing::trace;
 
-#[derive(Props)]
-pub struct ListNotesProps<'a> {
-    #[props(!optional)]
-    pub subject: Option<SubjectId>,
-    pub on_select_subject: EventHandler<'a, SubjectId>,
-}
-
-pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
-    let query = use_note_query(cx, cx.props.subject).notes();
+#[tracing::instrument(skip(cx))]
+pub fn ListNotes(cx: Scope) -> Element {
+    trace!("Begin VDOM creation");
+    let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
+    let query = use_note_query(cx, my_subject.read().0).notes();
 
     let mut groups = BTreeMap::new();
     for node in query.iter() {
@@ -41,7 +35,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
                             key: "{note.id.0}",
                             note: note.clone(),
                             on_select_subject: |subject: Subject| {
-                                cx.props.on_select_subject.call(subject.id);
+                                my_subject.write().0 = Some(subject.id);
                             },
                         } }
                     })
@@ -59,7 +53,7 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
         rsx! {
             CreateNote {
                 key: "input",
-                subject: cx.props.subject,
+                subject: my_subject.read().0,
                 on_create_note: |_| show_input.write().0 = false,
                 on_cancel: |_| show_input.write().0 = false
             }
@@ -78,6 +72,8 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     };
 
     groups[0].1.insert(0, add_note);
+
+    trace!("End VDOM creation");
 
     render! {
         div {

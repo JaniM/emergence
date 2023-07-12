@@ -1,13 +1,31 @@
 
 use dioxus::prelude::*;
 
-use crate::{data::{query::use_subject_query, subjects::{SubjectId, Subject}}, views::{list_notes::ListNotes, select_subject::SelectSubject}};
+use crate::{
+    data::{
+        query::use_subject_query,
+        subjects::{Subject, SubjectId},
+    },
+    views::{list_notes::ListNotes, select_subject::SelectSubject},
+};
+
+pub struct SelectedSubject(pub Option<SubjectId>);
+
+impl std::ops::Deref for SelectedSubject {
+    type Target = Option<SubjectId>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 pub fn Journal(cx: Scope) -> Element {
-    let subjects = use_subject_query(cx).subjects();
-    let my_subject = use_state(cx, || None::<SubjectId>);
+    use_shared_state_provider(cx, || SelectedSubject(None));
 
-    let subject_name = my_subject
+    let subjects = use_subject_query(cx).subjects();
+    let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
+
+    let subject_name = my_subject.read()
         .and_then(|id| subjects.get(&id))
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Journal".to_string());
@@ -28,11 +46,11 @@ pub fn Journal(cx: Scope) -> Element {
                     class: "select-column",
                     div {
                         class: "row",
-                        if *my_subject.get() != None {
+                        if my_subject.read().0 != None {
                             rsx! {
                                 button {
                                     class: "select-button",
-                                    onclick: |_| my_subject.set(None),
+                                    onclick: |_| my_subject.write().0 = None,
                                     "Journal"
                                 }
                             }
@@ -47,7 +65,7 @@ pub fn Journal(cx: Scope) -> Element {
                         rsx! {
                             SelectSubject {
                                 on_select: |subject: Subject| {
-                                    my_subject.set(Some(subject.id));
+                                    my_subject.write().0 = Some(subject.id);
                                     show_subject_select.set(false);
                                 },
                                 on_cancel: |_| show_subject_select.set(false),
@@ -59,12 +77,7 @@ pub fn Journal(cx: Scope) -> Element {
             },
             div {
                 class: "notes",
-                ListNotes {
-                    subject: *my_subject.get(),
-                    on_select_subject: |subject| {
-                        my_subject.set(Some(subject));
-                    },
-                }
+                ListNotes { }
             }
         }
     }
