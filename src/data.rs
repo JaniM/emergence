@@ -8,7 +8,7 @@ use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::{cell::RefCell, collections::HashMap};
-use tracing::{info, instrument, trace};
+use tracing::{info, instrument, debug};
 use uuid::Uuid;
 
 use query::NoteQuerySource;
@@ -33,7 +33,7 @@ pub enum ConnectionType {
 impl Store {
     #[instrument()]
     pub fn new(file: ConnectionType) -> Self {
-        trace!("Begin");
+        debug!("Begin");
         let conn = match file {
             ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
             ConnectionType::File(path) => Connection::open(path).unwrap(),
@@ -54,7 +54,7 @@ impl Store {
         // shove_test_data(&mut store.conn.borrow_mut()).unwrap();
         store.update_subject_sources();
 
-        trace!("Finished");
+        debug!("Finished");
         store
     }
 }

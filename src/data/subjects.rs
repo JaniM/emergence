@@ -1,7 +1,7 @@
 use std::rc::Rc;
 
 use rusqlite::{ToSql, params};
-use tracing::{instrument, trace};
+use tracing::{instrument, debug};
 use uuid::Uuid;
 
 use super::Store;
@@ -33,7 +33,7 @@ impl std::fmt::Display for SubjectId {
 impl Store {
     #[instrument(skip(self))]
     pub fn get_subjects(&self) -> rusqlite::Result<Vec<Subject>> {
-        trace!("Begin");
+        debug!("Begin");
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
             "SELECT id, name
@@ -48,13 +48,13 @@ impl Store {
                 }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
-        trace!("Finished");
+        debug!("Finished");
         Ok(subjects)
     }
 
     #[instrument(skip(self))]
     pub fn add_subject(&mut self, name: String) -> rusqlite::Result<Subject> {
-        trace!("Adding subject");
+        debug!("Adding subject");
         let id = Uuid::new_v4();
         self.conn
             .borrow()

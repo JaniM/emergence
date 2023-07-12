@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use const_format::formatcp;
 use rusqlite::{params, Connection, Row};
 use std::rc::Rc;
-use tracing::{instrument, trace};
+use tracing::{instrument, debug};
 use uuid::Uuid;
 
 use super::{subjects::SubjectId, Store};
@@ -55,14 +55,17 @@ impl NoteData {
     }
 
     pub fn with_task_state(&self, task_state: TaskState) -> Self {
-        Self { task_state, ..self.clone() }
+        Self {
+            task_state,
+            ..self.clone()
+        }
     }
 }
 
 impl Store {
     #[instrument(skip(self))]
     pub fn add_note(&self, text: String, subjects: Vec<SubjectId>) -> rusqlite::Result<Note> {
-        trace!("Adding note");
+        debug!("Adding note");
         let id = Uuid::new_v4();
         let created_at = Local::now();
         {
@@ -99,7 +102,7 @@ impl Store {
 
     #[instrument(skip(self))]
     pub fn update_note(&self, note: Note) -> rusqlite::Result<()> {
-        trace!("Updating note");
+        debug!("Updating note");
         {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
@@ -141,7 +144,7 @@ impl Store {
 
     #[instrument(skip(self))]
     pub fn delete_note(&self, note: NoteId) -> rusqlite::Result<()> {
-        trace!("Deleting note");
+        debug!("Deleting note");
         {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
@@ -168,7 +171,7 @@ impl Store {
 
     #[instrument(skip(self))]
     pub fn get_notes(&self, subject: Option<SubjectId>) -> rusqlite::Result<Vec<Note>> {
-        trace!("Begin");
+        debug!("Begin");
 
         let conn = self.conn.borrow();
         let notes = if let Some(subject) = subject {
@@ -177,10 +180,12 @@ impl Store {
             notes_list_all(&conn)?
         };
 
-        trace!("Finished");
+        debug!("Finished");
         Ok(notes)
     }
 }
+
+const PAGE_SIZE: usize = 200;
 
 const NOTE_COLUMNS: &'static str = "
     n.id,
@@ -193,23 +198,23 @@ const NOTE_COLUMNS: &'static str = "
 ";
 
 const NOTE_LIST_ALL: &'static str = formatcp!(
-    r#"SELECT
-        {}
+    r#"SELECT {columns}
     FROM notes n
     ORDER BY n.created_at DESC
-    LIMIT 1000"#,
-    NOTE_COLUMNS
+    LIMIT {page}"#,
+    columns = NOTE_COLUMNS,
+    page = PAGE_SIZE
 );
 
 const NOTE_SEARCH_BY_SUBJECT: &'static str = formatcp!(
-    r#"SELECT
-        {}
+    r#"SELECT {columns}
     FROM notes_search s
     INNER JOIN notes n ON s.note_id = n.id
     WHERE s.subject_id = ?1
     ORDER BY s.created_at DESC
-    LIMIT 1000"#,
-    NOTE_COLUMNS
+    LIMIT {page}"#,
+    columns = NOTE_COLUMNS,
+    page = PAGE_SIZE
 );
 
 fn notes_list_all(conn: &Connection) -> rusqlite::Result<Vec<Note>> {
