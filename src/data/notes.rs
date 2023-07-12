@@ -11,20 +11,51 @@ use super::{subjects::SubjectId, Store};
 #[repr(transparent)]
 pub struct NoteId(pub Uuid);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TaskState {
+    NotATask,
+    Todo,
+    Done,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NoteData {
     pub id: NoteId,
     pub text: String,
     pub subjects: Vec<SubjectId>,
+    pub task_state: TaskState,
     pub created_at: DateTime<Local>,
     pub modified_at: DateTime<Local>,
 }
 
 pub type Note = Rc<NoteData>;
 
+impl TaskState {
+    pub fn to_db_value(self) -> i64 {
+        match self {
+            TaskState::NotATask => 0,
+            TaskState::Todo => 1,
+            TaskState::Done => 2,
+        }
+    }
+
+    pub fn from_db_value(value: i64) -> Self {
+        match value {
+            0 => TaskState::NotATask,
+            1 => TaskState::Todo,
+            2 => TaskState::Done,
+            _ => panic!("Invalid task state: {}", value),
+        }
+    }
+}
+
 impl NoteData {
     pub fn to_note(self) -> Note {
         Rc::new(self)
+    }
+
+    pub fn with_task_state(&self, task_state: TaskState) -> Self {
+        Self { task_state, ..self.clone() }
     }
 }
 
@@ -60,6 +91,7 @@ impl Store {
             id: NoteId(id),
             text,
             subjects,
+            task_state: TaskState::NotATask,
             created_at,
             modified_at: created_at,
         }))
@@ -75,13 +107,15 @@ impl Store {
             tx.prepare_cached(
                 "UPDATE notes
                 SET text = ?2,
-                    modified_at = ?3
+                    modified_at = ?3,
+                    task_state = ?4
                 WHERE id = ?1",
             )?
             .execute(params![
                 note.id.0,
                 note.text,
-                Local::now().naive_local().timestamp_nanos()
+                Local::now().naive_local().timestamp_nanos(),
+                note.task_state.to_db_value()
             ])?;
 
             tx.prepare_cached(
@@ -153,6 +187,7 @@ const NOTE_COLUMNS: &'static str = "
     n.text,
     (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
     as subjects,
+    n.task_state,
     n.created_at,
     n.modified_at
 ";
@@ -200,7 +235,8 @@ fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
         id: NoteId(row.get(0)?),
         text: row.get(1)?,
         subjects,
-        created_at: Local.timestamp_nanos(row.get(3)?),
-        modified_at: Local.timestamp_nanos(row.get(4)?),
+        task_state: TaskState::from_db_value(row.get(3)?),
+        created_at: Local.timestamp_nanos(row.get(4)?),
+        modified_at: Local.timestamp_nanos(row.get(5)?),
     }))
 }

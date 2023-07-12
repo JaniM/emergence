@@ -133,7 +133,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
 
     cx.render(rsx! {
         div {
-            class: "note",
+            class: "note note-row",
             SubjectCards {
                 sids: subjects.read().clone(),
                 on_add_subject: |_| show_subjects.set(ShowSubjects::YesMouse),

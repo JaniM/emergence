@@ -121,17 +121,56 @@ div, textarea, input, button {
     height: fit-content;
 }
 
-.note {
+.note-row {
     position: relative;
-    display: block;
-    height: fit-content;
+    display: flex;
+    flex-flow: row;
+    gap: 5px;
     border: 1px solid #ccc;
     background-color: #eee;
+}
+
+.note {
+    display: flex;
+    flex-grow: 1;
+    height: fit-content;
     padding: 5px;
     white-space: pre-wrap;
 }
 
+.task-button-wrapper {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: flex-end;
+}
+
+.task-button {
+    width: 40px;
+    height: 16px;
+    line-height: 16px;
+    border-left: 1px solid #666;
+    border-top: 1px solid #666;
+    font-size: 0.6em;
+    text-align: center;
+    cursor: pointer;
+}
+
+.task-button.not-a-task {
+    background-color: #eee;
+}
+
+.task-button.todo {
+    background-color: #aaa;
+}
+
+.task-button.done {
+    background-color: #7c3;
+}
+
 .note .note-content {
+    display: flex;
+    flex-grow: 1;
     user-select: text;
     -webkit-user-select: text;
     -moz-user-select: text;

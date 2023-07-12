@@ -13,6 +13,8 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS notes (
             id BLOB PRIMARY KEY,
             text TEXT NOT NULL,
+            -- 0 = not a task, 1 = incomplete, 2 = complete
+            task_state INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             modified_at INTEGER NOT NULL
         ) STRICT;
@@ -53,6 +55,21 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         END;
     "#,
     )?;
+
+    // Add notes.task_state column if it doesn't exist
+    let task_state_exists = conn
+        .prepare_cached(
+            "SELECT 1 FROM pragma_table_info('notes')
+            WHERE name = 'task_state'",
+        )?
+        .query_row(params![], |_| Ok(true))
+        .unwrap_or(false);
+
+    if !task_state_exists {
+        conn.execute_batch(
+            "ALTER TABLE notes ADD COLUMN task_state INTEGER NOT NULL DEFAULT 0;",
+        )?;
+    }
 
     let search_index_count = conn
         .prepare_cached("SELECT COUNT(*) FROM notes_search")?

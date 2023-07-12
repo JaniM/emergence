@@ -1,6 +1,6 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
-    notes::Note,
+    notes::{Note, TaskState},
     query::{use_store, use_subject_query},
     subjects::{Subject, SubjectId},
 };
@@ -59,12 +59,28 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         }
     };
 
+    let make_task = {
+        let note = note.clone();
+        move |_| {
+            let new_state = match note.task_state {
+                TaskState::NotATask => TaskState::Todo,
+                TaskState::Todo => TaskState::NotATask,
+                TaskState::Done => TaskState::NotATask,
+            };
+            let new_note = note.with_task_state(new_state).to_note();
+            store.read().update_note(new_note).unwrap();
+            state.set(State::Normal);
+        }
+    };
+
     let dropdown = if let State::Dropdown(x, y) = *state.get() {
         Some(rsx! {
             Dropdown {
                 pos: (x, y),
+                note: note.clone(),
                 on_edit: |_| state.set(State::Edit),
                 on_delete: delete,
+                on_make_task: make_task,
                 on_close: |_| state.set(State::Normal),
             }
         })
@@ -78,6 +94,30 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         &cx.props.note.text
     };
 
+    let task_button = match cx.props.note.task_state {
+        TaskState::NotATask => rsx! { div { } },
+        TaskState::Todo => rsx! {
+            div {
+                class: "task-button todo",
+                onclick: |_| {
+                    let new_note = cx.props.note.with_task_state(TaskState::Done).to_note();
+                    store.read().update_note(new_note).unwrap();
+                },
+                "TODO"
+            }
+        },
+        TaskState::Done => rsx! {
+            div {
+                class: "task-button done",
+                onclick: |_| {
+                    let new_note = cx.props.note.with_task_state(TaskState::Todo).to_note();
+                    store.read().update_note(new_note).unwrap();
+                },
+                "DONE"
+            }
+        },
+    };
+
     let content = if *state.get() == State::Edit {
         rsx! {
             EditNote {
@@ -88,7 +128,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     } else {
         rsx! {
             div {
-                class: "note",
+                class: "note-row",
                 SubjectCards {
                     sids: note.subjects.clone(),
                     on_click_subject: |subject: Subject| {
@@ -96,11 +136,18 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                     },
                 },
                 div {
-                    class: "note-content",
-                    title: "{time_text}",
-                    onmousedown: on_mousedown,
-                    "{text}",
+                    class: "note",
+                    div {
+                        class: "note-content",
+                        title: "{time_text}",
+                        onmousedown: on_mousedown,
+                        "{text}",
+                    },
                 },
+                div {
+                    class: "task-button-wrapper",
+                    task_button,
+                }
                 dropdown
             }
         }
@@ -112,8 +159,10 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
 #[derive(Props)]
 struct DropdownProps<'a> {
     pos: (f64, f64),
+    note: Note,
     on_edit: EventHandler<'a, ()>,
     on_delete: EventHandler<'a, ()>,
+    on_make_task: EventHandler<'a, ()>,
     on_close: EventHandler<'a, ()>,
 }
 
@@ -127,6 +176,15 @@ fn Dropdown<'a>(cx: Scope<'a, DropdownProps<'a>>) -> Element<'a> {
                 e.inner().set_focus(true);
             },
             onblur: |_| cx.props.on_close.call(()),
+            div {
+                class: "note-dropdown-item",
+                onclick: |_| cx.props.on_make_task.call(()),
+                if cx.props.note.task_state == TaskState::NotATask {
+                    "Make Task"
+                } else {
+                    "Make Note"
+                }
+            },
             div {
                 class: "note-dropdown-item",
                 onclick: |_| cx.props.on_edit.call(()),
