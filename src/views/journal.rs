@@ -14,28 +14,6 @@ pub fn Journal(cx: Scope) -> Element {
 
     let show_subject_select = use_state(cx, || false);
 
-    let add_note = if show_input.read().0 {
-        rsx! {
-            CreateNote {
-                key: "input",
-                subject: cx.props.subject,
-                on_create_note: |_| show_input.write().0 = false,
-                on_cancel: |_| show_input.write().0 = false
-            }
-        }
-    } else {
-        rsx! {
-            button {
-                key: "add-note-button",
-                class: "add-note",
-                onclick: |_| {
-                    show_input.write().0 = true;
-                },
-                "Add note"
-            }
-        }
-    };
-
     render! {
         div {
             class: "journal",
