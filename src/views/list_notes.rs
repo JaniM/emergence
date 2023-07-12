@@ -18,7 +18,6 @@ pub struct ListNotesProps<'a> {
 
 pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     let query = use_note_query(cx, cx.props.subject).notes();
-    let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
     let mut groups = BTreeMap::new();
     for node in query.iter() {
@@ -54,28 +53,6 @@ pub fn ListNotes<'a>(cx: Scope<'a, ListNotesProps<'a>>) -> Element<'a> {
     if groups.is_empty() || groups[0].0 != today {
         groups.insert(0, (today, vec![]));
     }
-
-    let add_note = if show_input.read().0 {
-        rsx! {
-            CreateNote {
-                key: "input",
-                subject: cx.props.subject,
-                on_create_note: |_| show_input.write().0 = false,
-                on_cancel: |_| show_input.write().0 = false
-            }
-        }
-    } else {
-        rsx! {
-            button {
-                key: "add-note-button",
-                class: "add-note",
-                onclick: |_| {
-                    show_input.write().0 = true;
-                },
-                "Add note"
-            }
-        }
-    };
 
     groups[0].1.insert(0, add_note);
 

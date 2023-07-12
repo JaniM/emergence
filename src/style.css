@@ -242,13 +242,10 @@ div, textarea, input, button {
 .note-dropdown {
     position: absolute;
     z-index: 1;
-    overflow: hidden;
     border: 1px solid #ccc;
-    background-color: #ccd;
-    padding: 5px;
+    background-color: #ddd;
     display: grid;
     grid-template-columns: 1fr;
-    grid-gap: 5px;
     outline: none;
 }
 
@@ -257,9 +254,11 @@ div, textarea, input, button {
     border: 1px solid #ccc;
     background-color: #bbd;
     padding: 5px;
-    white-space: pre-wrap;
-    text-align: left;
     cursor: pointer;
+}
+
+.note-dropdown .note-dropdown-item:not(:last-child) {
+    border-bottom: 1px solid #666;
 }
 
 .note-dropdown .note-dropdown-item:hover,

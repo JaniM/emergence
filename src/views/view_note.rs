@@ -33,6 +33,8 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         .format("%Y-%m-%d %H:%M")
         .to_string();
 
+    // TODO: This probably should use oncontextmenu
+    // See https://developer.mozilla.org/en-US/docs/Web/API/Element/contextmenu_event
     let on_mousedown = {
         let state = state.clone();
         move |e: MouseEvent| {
