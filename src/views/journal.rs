@@ -31,6 +31,7 @@ pub fn Journal(cx: Scope) -> Element {
         .unwrap_or_else(|| "Journal".to_string());
 
     let show_subject_select = use_state(cx, || false);
+    let tasks_only = use_state(cx, || false);
 
     render! {
         div {
@@ -46,6 +47,15 @@ pub fn Journal(cx: Scope) -> Element {
                     class: "select-column",
                     div {
                         class: "row",
+                        button {
+                            class: if *tasks_only.get() {
+                                "select-button selected"
+                            } else {
+                                "select-button"
+                            },
+                            onclick: |_| tasks_only.set(!*tasks_only.get()),
+                            "Tasks Only"
+                        }
                         if my_subject.read().0 != None {
                             rsx! {
                                 button {
@@ -77,7 +87,9 @@ pub fn Journal(cx: Scope) -> Element {
             },
             div {
                 class: "notes",
-                ListNotes { }
+                ListNotes {
+                    tasks_only: *tasks_only.get(),
+                }
             }
         }
     }

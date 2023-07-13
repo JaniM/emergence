@@ -20,6 +20,8 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         ) STRICT;
 
         CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
+        CREATE INDEX IF NOT EXISTS notes_tasks_index ON notes(task_state ASC, created_at DESC);
+
 
         CREATE TABLE IF NOT EXISTS notes_subjects (
             note_id BLOB NOT NULL,
@@ -33,18 +35,23 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             note_id BLOB NOT NULL,
             subject_id BLOB NOT NULL,
             created_at INTEGER NOT NULL,
+            task_state INTEGER NOT NULL DEFAULT 0,
             PRIMARY KEY (note_id, subject_id),
             FOREIGN KEY (note_id) REFERENCES notes(id),
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
 
         CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at, note_id);
+        CREATE INDEX IF NOT EXISTS notes_search_tasks_index ON notes_search (subject_id, task_state ASC, created_at DESC, note_id);
+
 
         CREATE TRIGGER IF NOT EXISTS notes_search_insert AFTER INSERT ON notes_subjects BEGIN
-            INSERT INTO notes_search (note_id, subject_id, created_at)
+            INSERT INTO notes_search (
+                note_id, subject_id, task_state, created_at)
             VALUES (
                 NEW.note_id,
                 NEW.subject_id,
+                (SELECT task_state FROM notes WHERE id = NEW.note_id),
                 (SELECT created_at FROM notes WHERE id = NEW.note_id)
             );
         END;
@@ -52,6 +59,12 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         CREATE TRIGGER IF NOT EXISTS notes_search_delete AFTER DELETE ON notes_subjects BEGIN
             DELETE FROM notes_search
             WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS notes_search_update_notes AFTER UPDATE ON notes BEGIN
+            UPDATE notes_search
+            SET task_state = NEW.task_state
+            WHERE note_id = NEW.id;
         END;
     "#,
     )?;
@@ -78,8 +91,13 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
     if search_index_count == 0 {
         conn.execute_batch(
             r#"
-            INSERT INTO notes_search (note_id, subject_id, created_at)
-            SELECT note_id, subject_id, (SELECT created_at FROM notes WHERE id = note_id)
+            INSERT INTO notes_search (
+                note_id, subject_id, task_state, created_at)
+            SELECT
+                note_id,
+                subject_id,
+                (SELECT task_state FROM notes WHERE id = note_id),
+                (SELECT created_at FROM notes WHERE id = note_id)
             FROM notes_subjects
             WHERE TRUE
             ON CONFLICT (note_id, subject_id) DO NOTHING;

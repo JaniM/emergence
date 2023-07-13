@@ -2,7 +2,7 @@ use chrono::prelude::*;
 use const_format::formatcp;
 use rusqlite::{params, Connection, Row};
 use std::rc::Rc;
-use tracing::{instrument, debug};
+use tracing::{debug, instrument};
 use uuid::Uuid;
 
 use super::{subjects::SubjectId, Store};
@@ -29,6 +29,61 @@ pub struct NoteData {
 }
 
 pub type Note = Rc<NoteData>;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct NoteBuilder {
+    text: String,
+    subjects: Vec<SubjectId>,
+    task_state: TaskState,
+}
+
+impl NoteBuilder {
+    pub fn new(text: String) -> Self {
+        Self {
+            text,
+            subjects: Vec::new(),
+            task_state: TaskState::NotATask,
+        }
+    }
+
+    pub fn subject(mut self, subject: SubjectId) -> Self {
+        self.subjects.push(subject);
+        self
+    }
+
+    pub fn subjects(mut self, subjects: Vec<SubjectId>) -> Self {
+        self.subjects.extend(subjects);
+        self
+    }
+
+    pub fn task_state(mut self, task_state: TaskState) -> Self {
+        self.task_state = task_state;
+        self
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct NoteSearch {
+    pub subject_id: Option<SubjectId>,
+    pub task_only: bool,
+}
+
+impl NoteSearch {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn subject(self, subject_id: SubjectId) -> Self {
+        Self {
+            subject_id: Some(subject_id),
+            ..self
+        }
+    }
+
+    pub fn task_only(self, task_only: bool) -> Self {
+        Self { task_only, ..self }
+    }
+}
 
 impl TaskState {
     pub fn to_db_value(self) -> i64 {
@@ -64,7 +119,10 @@ impl NoteData {
 
 impl Store {
     #[instrument(skip(self))]
-    pub fn add_note(&self, text: String, subjects: Vec<SubjectId>) -> rusqlite::Result<Note> {
+    pub fn add_note(
+        &self,
+        note: NoteBuilder
+    ) -> rusqlite::Result<Note> {
         debug!("Adding note");
         let id = Uuid::new_v4();
         let created_at = Local::now();
@@ -73,12 +131,19 @@ impl Store {
             let tx = conn.transaction()?;
 
             tx.prepare_cached(
-                "INSERT INTO notes (id, text, created_at, modified_at)
-                VALUES (?1, ?2, ?3, ?3)",
+                "INSERT INTO notes (
+                    id, text, task_state, created_at, modified_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?4)",
             )?
-            .execute(params![id, text, created_at.naive_utc().timestamp_nanos()])?;
+            .execute(params![
+                id,
+                &note.text,
+                note.task_state.to_db_value(),
+                created_at.naive_utc().timestamp_nanos()
+            ])?;
 
-            for subject in &subjects {
+            for subject in &note.subjects {
                 tx.prepare_cached(
                     "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
                 )?
@@ -92,8 +157,8 @@ impl Store {
 
         Ok(Rc::new(NoteData {
             id: NoteId(id),
-            text,
-            subjects,
+            text: note.text,
+            subjects: note.subjects,
             task_state: TaskState::NotATask,
             created_at,
             modified_at: created_at,
@@ -170,14 +235,23 @@ impl Store {
     }
 
     #[instrument(skip(self))]
-    pub fn get_notes(&self, subject: Option<SubjectId>) -> rusqlite::Result<Vec<Note>> {
+    pub fn get_notes(&self, query: NoteSearch) -> rusqlite::Result<Vec<Note>> {
         debug!("Begin");
 
         let conn = self.conn.borrow();
-        let notes = if let Some(subject) = subject {
-            notes_search_by_subject(&conn, subject)?
-        } else {
-            notes_list_all(&conn)?
+        let notes = match query {
+            NoteSearch {
+                subject_id: subject,
+                task_only: true,
+            } => tasks_search_by_subject(&conn, subject)?,
+            NoteSearch {
+                subject_id: Some(subject),
+                task_only: false,
+            } => notes_search_by_subject(&conn, subject)?,
+            NoteSearch {
+                subject_id: None,
+                task_only: false,
+            } => notes_list_all(&conn)?,
         };
 
         debug!("Finished");
@@ -226,6 +300,41 @@ fn notes_list_all(conn: &Connection) -> rusqlite::Result<Vec<Note>> {
 fn notes_search_by_subject(conn: &Connection, subject: SubjectId) -> rusqlite::Result<Vec<Note>> {
     conn.prepare_cached(NOTE_SEARCH_BY_SUBJECT)?
         .query_map(params![subject], map_row_to_note)?
+        .collect()
+}
+
+fn tasks_search_by_subject(
+    conn: &Connection,
+    subject: Option<SubjectId>,
+) -> rusqlite::Result<Vec<Note>> {
+    // TODO: This query misses indexes, optimize it
+    let search = format!(
+        r#"SELECT {columns}
+        FROM notes n
+        {subject_clause}
+        WHERE notes_search.task_state > 0 
+        ORDER BY notes_search.task_state ASC, notes_search.created_at DESC
+        LIMIT {page}"#,
+        columns = NOTE_COLUMNS,
+        page = PAGE_SIZE,
+        subject_clause = if subject.is_some() {
+            "INNER JOIN notes_search 
+            ON notes_search.note_id = n.id AND notes_search.subject_id = ?1"
+        } else {
+            ""
+        }
+    );
+
+    let search = if subject.is_some() {
+        search
+    } else {
+        search.replace("notes_search", "n")
+    };
+    let params1 = params![subject];
+    let params2 = params![];
+    let params = if subject.is_some() { params1 } else { params2 };
+    conn.prepare_cached(&search)?
+        .query_map(params, map_row_to_note)?
         .collect()
 }
 

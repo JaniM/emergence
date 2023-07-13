@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use super::Store;
+use super::notes::NoteSearch;
 use super::subjects::{Subject, SubjectId};
 
 pub fn use_store(cx: &ScopeState) -> &UseSharedState<super::Store> {
@@ -16,7 +17,7 @@ pub fn use_store(cx: &ScopeState) -> &UseSharedState<super::Store> {
 
 pub(super) struct NoteQuerySource {
     pub note_data: Vec<Note>,
-    pub subject: Option<SubjectId>,
+    pub search: NoteSearch,
     pub update_callback: Arc<dyn Fn()>,
     pub alive: bool,
 }
@@ -35,13 +36,13 @@ impl Debug for NoteQuerySource {
     }
 }
 
-pub fn use_note_query<'a, 'b>(cx: &'a ScopeState, subject: Option<SubjectId>) -> &'a NoteQuery {
+pub fn use_note_query<'a, 'b>(cx: &'a ScopeState, search: NoteSearch) -> &'a NoteQuery {
     let store = use_store(cx).read();
     let query = cx.use_hook(|| {
         let update_callback = cx.schedule_update();
         let source = Rc::new(RefCell::new(NoteQuerySource {
             note_data: Vec::new(),
-            subject,
+            search,
             update_callback,
             alive: true,
         }));
@@ -49,8 +50,8 @@ pub fn use_note_query<'a, 'b>(cx: &'a ScopeState, subject: Option<SubjectId>) ->
         NoteQuery { source }
     });
 
-    if query.source.borrow().subject != subject {
-        query.source.borrow_mut().subject = subject;
+    if query.source.borrow().search != search {
+        query.source.borrow_mut().search = search;
         // TODO: Use a finer-grained update
         store.update_note_sources();
     }
@@ -133,7 +134,7 @@ impl Store {
     #[instrument(skip_all)]
     fn add_note_source(&self, source: Rc<RefCell<NoteQuerySource>>) {
         trace!("Adding note source");
-        let subject = source.borrow().subject;
+        let subject = source.borrow().search;
         source.borrow_mut().note_data = self.get_notes(subject).unwrap();
         self.note_sources.borrow_mut().push(source);
     }
@@ -144,7 +145,7 @@ impl Store {
         sources.retain(|s| s.borrow().alive);
         for source in sources.iter() {
             let mut source = source.borrow_mut();
-            source.note_data = self.get_notes(source.subject).unwrap();
+            source.note_data = self.get_notes(source.search).unwrap();
             (source.update_callback)();
         }
     }

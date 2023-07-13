@@ -11,12 +11,13 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use emergence::data::notes::{Note, NoteData};
+use emergence::data::notes::{Note, NoteBuilder, NoteData, TaskState};
 
 #[derive(Props)]
 pub struct CreateNoteProps<'a> {
     #[props(!optional)]
     subject: Option<SubjectId>,
+    task: bool,
     on_create_note: EventHandler<'a, String>,
     on_cancel: EventHandler<'a, ()>,
 }
@@ -26,7 +27,14 @@ pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
 
     let on_create_note = |(text, subjects): (String, Vec<SubjectId>)| {
         if !text.is_empty() {
-            store.read().add_note(text.clone(), subjects).unwrap();
+            let note = NoteBuilder::new(text.clone())
+                .subjects(subjects)
+                .task_state(if cx.props.task {
+                    TaskState::Todo
+                } else {
+                    TaskState::NotATask
+                });
+            store.read().add_note(note).unwrap();
         }
         cx.props.on_create_note.call(text);
     };

@@ -70,6 +70,10 @@ div, textarea, input, button {
     cursor: pointer;
 }
 
+.journal .header .select-button.selected {
+    background-color: rgb(180, 200, 230);
+}
+
 .row {
     display: flex;
     flex-flow: row;
