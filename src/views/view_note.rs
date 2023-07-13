@@ -6,7 +6,7 @@ use emergence::data::{
 };
 use tracing::debug;
 
-use crate::views::note_input::EditNote;
+use crate::views::{note_input::EditNote, confirm_dialog::ConfirmDialog};
 
 #[derive(Props)]
 pub struct ViewNoteProps<'a> {
@@ -20,6 +20,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         Normal,
         Dropdown(f64, f64),
         Edit,
+        ConfirmDelete,
     }
 
     let store = use_store(cx);
@@ -46,13 +47,16 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             match state.get() {
                 State::Normal => state.set(State::Dropdown(coord.x, coord.y)),
                 State::Dropdown(_, _) => state.set(State::Normal),
-                State::Edit => {}
+                _ => {}
             }
         }
     };
 
-    // TODO: Add a confirmation dialog
-    let delete = {
+    let on_delete = move |_| {
+        state.set(State::ConfirmDelete);
+    };
+
+    let actually_swlete = {
         let note = note.clone();
         move |_| {
             store.read().delete_note(note.id).unwrap();
@@ -79,7 +83,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 pos: (x, y),
                 note: note.clone(),
                 on_edit: |_| state.set(State::Edit),
-                on_delete: delete,
+                on_delete: on_delete,
                 on_make_task: make_task,
                 on_close: |_| state.set(State::Normal),
             }
@@ -103,7 +107,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                     let new_note = cx.props.note.with_task_state(TaskState::Done).to_note();
                     store.read().update_note(new_note).unwrap();
                 },
-                "TODO"
+                title: "TODO"
             }
         },
         TaskState::Done => rsx! {
@@ -113,7 +117,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                     let new_note = cx.props.note.with_task_state(TaskState::Todo).to_note();
                     store.read().update_note(new_note).unwrap();
                 },
-                "DONE"
+                title: "DONE"
             }
         },
     };
@@ -129,7 +133,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     } else {
         None
     };
-    let overlay = if let State::Dropdown { .. } = *state.get() {
+    let overlay = if let State::Dropdown { .. } | State::ConfirmDelete = *state.get() {
         Some(rsx! {
             overlay,
             div {
@@ -139,6 +143,19 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         })
     } else {
         overlay
+    };
+
+    let confirm_delete = if let State::ConfirmDelete = *state.get() {
+        Some(rsx! {
+            ConfirmDialog {
+                title: "Delete Note",
+                message: "Are you sure you want to delete this note?",
+                on_confirm: actually_swlete,
+                on_cancel: |_| state.set(State::Normal),
+            }
+        })
+    } else {
+        None
     };
 
     let content = if *state.get() == State::Edit {
@@ -169,7 +186,8 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                         "{text}",
                     },
                 },
-                dropdown
+                dropdown,
+                confirm_delete,
             }
         }
     };
