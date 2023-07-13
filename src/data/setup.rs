@@ -60,12 +60,6 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             DELETE FROM notes_search
             WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
         END;
-
-        CREATE TRIGGER IF NOT EXISTS notes_search_update_notes AFTER UPDATE ON notes BEGIN
-            UPDATE notes_search
-            SET task_state = NEW.task_state
-            WHERE note_id = NEW.id;
-        END;
     "#,
     )?;
 

@@ -115,6 +115,14 @@ impl NoteData {
             ..self.clone()
         }
     }
+
+    #[cfg(test)]
+    pub fn with_subjects(&self, subjects: Vec<SubjectId>) -> Self {
+        Self {
+            subjects,
+            ..self.clone()
+        }
+    }
 }
 
 impl Store {

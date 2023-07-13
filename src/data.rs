@@ -111,7 +111,7 @@ pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
 mod test {
     use std::ops::Deref;
 
-    use crate::data::notes::{NoteBuilder, NoteData, NoteSearch};
+    use crate::data::notes::{NoteBuilder, NoteData, NoteSearch, TaskState};
 
     use super::*;
     use rusqlite::Result;
@@ -251,6 +251,55 @@ mod test {
 
         let notes = store.get_notes(NoteSearch::new()).unwrap();
         assert_eq!(notes.len(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_tasks() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let subject1 = store.add_subject("Test subject 1".to_string())?;
+        let subject2 = store.add_subject("Test subject 2".to_string())?;
+
+        let note1 = store.add_note(
+            NoteBuilder::new("Test note 1".to_string())
+                .subject(subject1.id)
+                .task_state(TaskState::NotATask),
+        )?;
+
+        let search = NoteSearch::new().task_only(true);
+
+        let notes = store.get_notes(search).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        store.update_note(note1.with_task_state(TaskState::Todo).to_note())?;
+
+        let notes = store.get_notes(search).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        let notes = store.get_notes(search.subject(subject1.id)).unwrap();
+        assert_eq!(notes.len(), 1);
+        let notes = store.get_notes(search.subject(subject2.id)).unwrap();
+        assert_eq!(notes.len(), 0);
+
+        store.update_note(note1.with_task_state(TaskState::Done).to_note())?;
+        let notes = store.get_notes(search).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        store.update_note(
+            note1
+                .with_task_state(TaskState::Todo)
+                .with_subjects(vec![subject2.id])
+                .to_note(),
+        )?;
+
+        let notes = store.get_notes(search).unwrap();
+        assert_eq!(notes.len(), 1);
+
+        let notes = store.get_notes(search.subject(subject1.id)).unwrap();
+        assert_eq!(notes.len(), 0);
+        let notes = store.get_notes(search.subject(subject2.id)).unwrap();
+        assert_eq!(notes.len(), 1);
 
         Ok(())
     }
