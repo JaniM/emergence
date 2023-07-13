@@ -99,12 +99,6 @@ fn App(cx: Scope<AppProps>) -> Element {
     // Workaround for not being able to attach event listeners to the document.
     let js = "
         if (!window.eventsRegistered) {
-            document.addEventListener('focusout', (e) => {
-                if (e.relatedTarget === null) {
-                    document.querySelector('.magic-capture').focus();
-                }
-            });
-
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Tab') return;
                 if (e.target.className === 'magic-capture') return;
@@ -145,8 +139,6 @@ fn App(cx: Scope<AppProps>) -> Element {
             style { include_str!("style.css") },
             div {
                 class: "magic-capture",
-                tabindex: 1000,
-                autofocus: true,
                 onkeydown: onkeydown,
             }
             Journal { },
