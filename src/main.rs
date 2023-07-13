@@ -27,6 +27,12 @@ struct Args {
     /// The database file to use
     #[arg(short, long, value_name = "FILE")]
     db_file: Option<PathBuf>,
+
+    /// Construct a sample database.
+    /// 
+    /// This will NOT overwrite an existing database.
+    #[arg(long)]
+    sample: bool,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -60,6 +66,17 @@ fn main() {
             .finish(),
     )
     .unwrap();
+
+    if args.sample {
+        if !db_file.exists() {
+            info!("Creating sample database, this may take a moment");
+            let store = Store::new(data::ConnectionType::File(db_file.clone()));
+            data::shove_test_data(&mut store.conn.borrow_mut()).unwrap();
+            info!("Finished creating sample database");
+        } else {
+            info!("Database file already exists, skipping sample database creation");
+        }
+    }
 
     info!("Starting app");
 

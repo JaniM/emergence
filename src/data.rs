@@ -1,8 +1,8 @@
 mod functions;
 pub mod notes;
 pub mod query;
-mod setup;
 pub mod subjects;
+mod setup;
 
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
