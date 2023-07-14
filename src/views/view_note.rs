@@ -6,7 +6,7 @@ use emergence::data::{
 };
 use tracing::debug;
 
-use crate::views::{note_input::EditNote, confirm_dialog::ConfirmDialog};
+use crate::views::{note_input::EditNote, confirm_dialog::ConfirmDialog, markdown::Markdown};
 
 #[derive(Props)]
 pub struct ViewNoteProps<'a> {
@@ -183,7 +183,9 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                     div {
                         class: "note-content",
                         title: "{time_text}",
-                        "{text}",
+                        Markdown {
+                            source: text.to_owned(),
+                        }
                     },
                 },
                 dropdown,
