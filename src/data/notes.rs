@@ -7,18 +7,18 @@ use uuid::Uuid;
 
 use super::{subjects::SubjectId, Store};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 pub struct NoteId(pub Uuid);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TaskState {
     NotATask,
     Todo,
     Done,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NoteData {
     pub id: NoteId,
     pub text: String,
@@ -30,7 +30,7 @@ pub struct NoteData {
 
 pub type Note = Rc<NoteData>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NoteBuilder {
     text: String,
     subjects: Vec<SubjectId>,
@@ -127,10 +127,7 @@ impl NoteData {
 
 impl Store {
     #[instrument(skip(self))]
-    pub fn add_note(
-        &self,
-        note: NoteBuilder
-    ) -> rusqlite::Result<Note> {
+    pub fn add_note(&self, note: NoteBuilder) -> rusqlite::Result<Note> {
         debug!("Adding note");
         let id = Uuid::new_v4();
         let created_at = Local::now();
@@ -171,6 +168,33 @@ impl Store {
             created_at,
             modified_at: created_at,
         }))
+    }
+
+    pub fn import_note(&self, note: &NoteData) -> rusqlite::Result<()> {
+        let mut conn = self.conn.borrow_mut();
+        let tx = conn.transaction()?;
+        tx.prepare_cached(
+            "INSERT INTO notes (
+                    id, text, task_state, created_at, modified_at
+                )
+                VALUES (?1, ?2, ?3, ?4, ?5)",
+        )?
+        .execute(params![
+            note.id.0,
+            &note.text,
+            note.task_state.to_db_value(),
+            note.created_at.naive_utc().timestamp_nanos(),
+            note.modified_at.naive_utc().timestamp_nanos()
+        ])?;
+
+        for subject in &note.subjects {
+            tx.prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
+                .execute(params![note.id.0, subject.0])?;
+        }
+
+        tx.commit()?;
+
+        Ok(())
     }
 
     #[instrument(skip(self))]
@@ -263,6 +287,20 @@ impl Store {
         };
 
         debug!("Finished");
+        Ok(notes)
+    }
+
+    pub fn get_all_notes(&self) -> rusqlite::Result<Vec<Note>> {
+        let conn = self.conn.borrow();
+        let notes = conn
+            .prepare_cached(formatcp!(
+                r#"SELECT {columns}
+                    FROM notes n
+                    ORDER BY n.created_at DESC"#,
+                columns = NOTE_COLUMNS
+            ))?
+            .query_map(params![], map_row_to_note)?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(notes)
     }
 }

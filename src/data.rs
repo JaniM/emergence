@@ -2,6 +2,7 @@ mod functions;
 pub mod notes;
 pub mod query;
 pub mod subjects;
+pub mod export;
 mod setup;
 
 use rusqlite::{params, Connection, Result};

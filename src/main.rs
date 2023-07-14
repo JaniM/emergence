@@ -33,6 +33,14 @@ struct Args {
     /// This will NOT overwrite an existing database.
     #[arg(long)]
     sample: bool,
+
+    /// Export to JSON file
+    #[arg(long, value_name = "FILE")]
+    export: Option<PathBuf>,
+
+    /// Import from JSON file
+    #[arg(long, value_name = "FILE")]
+    import: Option<PathBuf>,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -66,6 +74,20 @@ fn main() {
             .finish(),
     )
     .unwrap();
+
+    if let Some(export_file) = args.export {
+        info!("Exporting to {}, this may take a long time", export_file.display());
+        data::export::export(db_file, export_file);
+        info!("Finished exporting");
+        return;
+    }
+
+    if let Some(import_file) = args.import {
+        info!("Importing from {}, this may take a long time", import_file.display());
+        data::export::import(db_file, import_file);
+        info!("Finished importing");
+        return;
+    }
 
     if args.sample {
         if !db_file.exists() {

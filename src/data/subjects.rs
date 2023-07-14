@@ -1,16 +1,16 @@
 use std::rc::Rc;
 
-use rusqlite::{ToSql, params};
-use tracing::{instrument, debug};
+use rusqlite::{params, ToSql};
+use tracing::{debug, instrument};
 use uuid::Uuid;
 
-use super::Store;
+use super::{notes::NoteId, Store};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 pub struct SubjectId(pub Uuid);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct SubjectData {
     pub id: SubjectId,
     pub name: String,
@@ -70,5 +70,35 @@ impl Store {
             id: SubjectId(id),
             name,
         }))
+    }
+
+    pub fn import_subject(&self, subject: &SubjectData) -> rusqlite::Result<()> {
+        self.conn
+            .borrow()
+            .prepare_cached("INSERT INTO subjects (id, name) VALUES (?1, ?2)")?
+            .execute(params![subject.id.0, subject.name])?;
+        Ok(())
+    }
+
+    pub fn get_notes_subjects(&self) -> rusqlite::Result<Vec<(NoteId, SubjectId)>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare_cached(
+            "SELECT note_id, subject_id
+            FROM notes_subjects",
+        )?;
+        let subjects = stmt
+            .query_map(params![], |row| {
+                Ok((NoteId(row.get(0)?), SubjectId(row.get(1)?)))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(subjects)
+    }
+
+    pub fn import_notes_subject(&self, note: NoteId, subject: SubjectId) -> rusqlite::Result<()> {
+        self.conn
+            .borrow()
+            .prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
+            .execute(params![note.0, subject.0])?;
+        Ok(())
     }
 }
