@@ -31,15 +31,15 @@ struct Args {
     /// Construct a sample database.
     /// 
     /// This will NOT overwrite an existing database.
-    #[arg(long)]
-    sample: bool,
+    #[arg(long, value_name = "row count")]
+    sample: Option<usize>,
 
     /// Export to JSON file
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", conflicts_with = "import")]
     export: Option<PathBuf>,
 
     /// Import from JSON file
-    #[arg(long, value_name = "FILE")]
+    #[arg(long, value_name = "FILE", conflicts_with = "export")]
     import: Option<PathBuf>,
 }
 
@@ -89,11 +89,11 @@ fn main() {
         return;
     }
 
-    if args.sample {
+    if let Some(row_count) = args.sample {
         if !db_file.exists() {
             info!("Creating sample database, this may take a moment");
             let store = Store::new(data::ConnectionType::File(db_file.clone()));
-            data::shove_test_data(&mut store.conn.borrow_mut()).unwrap();
+            data::shove_test_data(&mut store.conn.borrow_mut(), row_count).unwrap();
             info!("Finished creating sample database");
         } else {
             info!("Database file already exists, skipping sample database creation");

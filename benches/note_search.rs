@@ -9,7 +9,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.noise_threshold(0.05);
 
     let store = Store::new(ConnectionType::InMemory);
-    shove_test_data(&mut *store.conn.borrow_mut()).unwrap();
+    shove_test_data(&mut *store.conn.borrow_mut(), 10_000).unwrap();
 
     let subjects = &store.get_subjects().unwrap();
     let subject = subjects.first().unwrap();

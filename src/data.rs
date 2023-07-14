@@ -75,7 +75,7 @@ impl Drop for Store {
 }
 
 #[allow(dead_code)]
-pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
+pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
     let tx = conn.transaction()?;
     let subject_xount = 10;
     let subject_ids = (1..=subject_xount)
@@ -86,7 +86,7 @@ pub fn shove_test_data(conn: &mut Connection) -> Result<()> {
             Ok(SubjectId(id))
         })
         .collect::<Result<Vec<_>>>()?;
-    for i in 0..10_000 {
+    for i in 1..=count {
         let id = Uuid::new_v4();
         let task_state = i % 3;
         tx.prepare(

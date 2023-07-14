@@ -8,7 +8,7 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS subjects (
             id BLOB PRIMARY KEY,
             name TEXT NOT NULL UNIQUE
-        ) STRICT;
+        ) WITHOUT ROWID, STRICT;
 
         CREATE TABLE IF NOT EXISTS notes (
             id BLOB PRIMARY KEY,
@@ -17,7 +17,7 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             task_state INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             modified_at INTEGER NOT NULL
-        ) STRICT;
+        ) WITHOUT ROWID, STRICT;
 
         CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
         CREATE INDEX IF NOT EXISTS notes_tasks_index ON notes(task_state ASC, created_at DESC);
@@ -29,14 +29,13 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             PRIMARY KEY (note_id, subject_id),
             FOREIGN KEY (note_id) REFERENCES notes(id),
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
-        ) STRICT;
+        ) WITHOUT ROWID, STRICT;
 
         CREATE TABLE IF NOT EXISTS notes_search (
             note_id BLOB NOT NULL,
             subject_id BLOB NOT NULL,
             created_at INTEGER NOT NULL,
             task_state INTEGER NOT NULL DEFAULT 0,
-            PRIMARY KEY (note_id, subject_id),
             FOREIGN KEY (note_id) REFERENCES notes(id),
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
@@ -92,9 +91,7 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
                 subject_id,
                 (SELECT task_state FROM notes WHERE id = note_id),
                 (SELECT created_at FROM notes WHERE id = note_id)
-            FROM notes_subjects
-            WHERE TRUE
-            ON CONFLICT (note_id, subject_id) DO NOTHING;
+            FROM notes_subjects;
         "#,
         )?;
     }
