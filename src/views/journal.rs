@@ -1,5 +1,8 @@
-
 use dioxus::prelude::*;
+use emergence::data::{
+    notes::NoteSearch,
+    query::{use_note_query, use_store},
+};
 
 use crate::{
     data::{
@@ -25,13 +28,27 @@ pub fn Journal(cx: Scope) -> Element {
     let subjects = use_subject_query(cx).subjects();
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
 
-    let subject_name = my_subject.read()
+    let subject_name = my_subject
+        .read()
         .and_then(|id| subjects.get(&id))
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Journal".to_string());
 
     let show_subject_select = use_state(cx, || false);
     let tasks_only = use_state(cx, || false);
+
+    let store = use_store(cx);
+    let note_count = use_note_query(cx, NoteSearch::new().subject_opt(my_subject.read().0))
+        .notes()
+        .len();
+
+    let delete_subject = move || {
+        let mut subject = my_subject.write();
+        if let Some(id) = subject.0 {
+            store.read().delete_subject(id).unwrap();
+        }
+        subject.0 = None;
+    };
 
     render! {
         div {
@@ -47,6 +64,15 @@ pub fn Journal(cx: Scope) -> Element {
                     class: "select-column",
                     div {
                         class: "row",
+                        if note_count == 0 && my_subject.read().0 != None {
+                            rsx! {
+                                button {
+                                    class: "select-button",
+                                    onclick: move |_| delete_subject(),
+                                    "Delete Subject"
+                                }
+                            }
+                        }
                         button {
                             class: if *tasks_only.get() {
                                 "select-button selected"

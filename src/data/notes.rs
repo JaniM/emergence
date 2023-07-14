@@ -80,6 +80,13 @@ impl NoteSearch {
         }
     }
 
+    pub fn subject_opt(self, subject_id: Option<SubjectId>) -> Self {
+        Self {
+            subject_id,
+            ..self
+        }
+    }
+
     pub fn task_only(self, task_only: bool) -> Self {
         Self { task_only, ..self }
     }

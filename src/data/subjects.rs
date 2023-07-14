@@ -72,6 +72,17 @@ impl Store {
         }))
     }
 
+    pub fn delete_subject(&self, subject: SubjectId) -> rusqlite::Result<()> {
+        self.conn
+            .borrow()
+            .prepare("DELETE FROM subjects WHERE id = ?1")?
+            .execute(params![subject.0])?;
+
+        self.update_subject_sources();
+
+        Ok(())
+    }
+
     pub fn import_subject(&self, subject: &SubjectData) -> rusqlite::Result<()> {
         self.conn
             .borrow()

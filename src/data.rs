@@ -1,10 +1,10 @@
+pub mod explain;
+pub mod export;
 mod functions;
 pub mod notes;
 pub mod query;
-pub mod subjects;
-pub mod export;
-pub mod explain;
 mod setup;
+pub mod subjects;
 
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
@@ -302,6 +302,27 @@ mod test {
         assert_eq!(notes.len(), 0);
         let notes = store.get_notes(search.subject(subject2.id)).unwrap();
         assert_eq!(notes.len(), 1);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_delete_subject() -> Result<()> {
+        let mut store = Store::new(ConnectionType::InMemory);
+        let subject1 = store.add_subject("Test subject 1".to_string())?;
+        let subject2 = store.add_subject("Test subject 2".to_string())?;
+
+        let note1 =
+            store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
+
+        assert!(store.delete_subject(subject1.id).is_err());
+        assert!(store.delete_subject(subject2.id).is_ok());
+
+        store.delete_note(note1.id)?;
+
+        assert!(store.delete_subject(subject1.id).is_ok());
+
+        assert!(store.get_subjects()?.is_empty());
 
         Ok(())
     }
