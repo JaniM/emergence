@@ -337,6 +337,23 @@ const NOTE_SEARCH_BY_SUBJECT: &'static str = formatcp!(
     page = PAGE_SIZE
 );
 
+pub fn query_for_search(query: NoteSearch) -> String {
+    match query {
+        NoteSearch {
+            subject_id,
+            task_only: true,
+        } => tasks_query(subject_id),
+        NoteSearch {
+            subject_id: Some(_),
+            task_only: false,
+        } => NOTE_SEARCH_BY_SUBJECT.to_owned(),
+        NoteSearch {
+            subject_id: None,
+            task_only: false,
+        } => NOTE_LIST_ALL.to_owned(),
+    }
+}
+
 fn notes_list_all(conn: &Connection) -> rusqlite::Result<Vec<Note>> {
     conn.prepare_cached(NOTE_LIST_ALL)?
         .query_map(params![], map_row_to_note)?
@@ -353,7 +370,16 @@ fn tasks_search_by_subject(
     conn: &Connection,
     subject: Option<SubjectId>,
 ) -> rusqlite::Result<Vec<Note>> {
-    // TODO: This query misses indexes, optimize it
+    let search = tasks_query(subject);
+    let params1 = params![subject];
+    let params2 = params![];
+    let params = if subject.is_some() { params1 } else { params2 };
+    conn.prepare_cached(&search)?
+        .query_map(params, map_row_to_note)?
+        .collect()
+}
+
+fn tasks_query(subject: Option<SubjectId>) -> String {
     let search = format!(
         r#"SELECT {columns}
         FROM notes n
@@ -376,12 +402,7 @@ fn tasks_search_by_subject(
     } else {
         search.replace("notes_search", "n")
     };
-    let params1 = params![subject];
-    let params2 = params![];
-    let params = if subject.is_some() { params1 } else { params2 };
-    conn.prepare_cached(&search)?
-        .query_map(params, map_row_to_note)?
-        .collect()
+    search
 }
 
 fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {

@@ -41,6 +41,10 @@ struct Args {
     /// Import from JSON file
     #[arg(long, value_name = "FILE", conflicts_with = "export")]
     import: Option<PathBuf>,
+
+    /// Explain database query plans
+    #[arg(long)]
+    explain: bool,
 }
 
 #[derive(ValueEnum, Debug, Clone, Copy)]
@@ -74,6 +78,12 @@ fn main() {
             .finish(),
     )
     .unwrap();
+
+    if args.explain {
+        info!("Explaining query plans");
+        data::explain::explain_all(data::ConnectionType::File(db_file)).unwrap();
+        return;
+    }
 
     if let Some(export_file) = args.export {
         info!("Exporting to {}, this may take a long time", export_file.display());
