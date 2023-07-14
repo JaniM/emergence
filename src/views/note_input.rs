@@ -112,9 +112,10 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     let rows = text.matches("\n").count() as i64 + 1;
 
     let submit = || {
+        let text = text.get().trim().to_string();
         cx.props
             .on_create_note
-            .call((text.get().clone(), subjects.read().clone()));
+            .call((text, subjects.read().clone()));
     };
 
     let cancel = || {

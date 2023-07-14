@@ -302,7 +302,7 @@ div, textarea, input, button {
 
 .note-dropdown {
     position: absolute;
-    z-index: 2;
+    z-index: 3;
     border: 1px solid #ccc;
     background-color: #ddd;
     display: grid;
