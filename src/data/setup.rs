@@ -40,8 +40,8 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             FOREIGN KEY (subject_id) REFERENCES subjects(id)
         ) STRICT;
 
-        CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at, note_id);
-        CREATE INDEX IF NOT EXISTS notes_search_tasks_index ON notes_search (subject_id, task_state ASC, created_at DESC, note_id);
+        CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at);
+        CREATE INDEX IF NOT EXISTS notes_search_tasks_index ON notes_search (subject_id, task_state ASC, created_at DESC);
 
 
         CREATE TRIGGER IF NOT EXISTS notes_search_insert AFTER INSERT ON notes_subjects BEGIN
