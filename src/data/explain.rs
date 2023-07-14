@@ -1,4 +1,4 @@
-use rusqlite::{Connection};
+use rusqlite::Connection;
 use uuid::Uuid;
 
 use crate::data::notes;

@@ -1,8 +1,5 @@
 use dioxus::prelude::*;
-use emergence::data::{
-    notes::NoteSearch,
-    query::{use_note_query, use_store},
-};
+use emergence::data::query::use_store;
 
 use crate::{
     data::{
@@ -38,9 +35,9 @@ pub fn Journal(cx: Scope) -> Element {
     let tasks_only = use_state(cx, || false);
 
     let store = use_store(cx);
-    let note_count = use_note_query(cx, NoteSearch::new().subject_opt(my_subject.read().0))
-        .notes()
-        .len();
+    let note_count = my_subject
+        .read()
+        .map_or(0, |s| store.read().subject_note_count(s).unwrap());
 
     let delete_subject = move || {
         let mut subject = my_subject.write();

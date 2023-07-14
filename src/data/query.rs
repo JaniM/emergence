@@ -2,7 +2,7 @@ use crate::data::notes::Note;
 use dioxus::prelude::*;
 use tracing::{instrument, trace};
 use std::cell::{Ref, RefCell};
-use std::collections::HashMap;
+use std::collections::{HashMap, BTreeMap};
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -141,11 +141,19 @@ impl Store {
 
     #[instrument(skip(self))]
     pub(super) fn update_note_sources(&self) {
+        let mut cache = BTreeMap::<NoteSearch, Vec<Note>>::new();
         let mut sources = self.note_sources.borrow_mut();
         sources.retain(|s| s.borrow().alive);
         for source in sources.iter() {
             let mut source = source.borrow_mut();
-            source.note_data = self.get_notes(source.search).unwrap();
+            let notes = if let Some(notes) = cache.get(&source.search) {
+                notes.clone()
+            } else {
+                let notes = self.get_notes(source.search).unwrap();
+                cache.insert(source.search.clone(), notes.clone());
+                notes
+            };
+            source.note_data = notes;
             (source.update_callback)();
         }
     }

@@ -62,7 +62,7 @@ impl NoteBuilder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, PartialOrd, Ord)]
 pub struct NoteSearch {
     pub subject_id: Option<SubjectId>,
     pub task_only: bool,
@@ -81,10 +81,7 @@ impl NoteSearch {
     }
 
     pub fn subject_opt(self, subject_id: Option<SubjectId>) -> Self {
-        Self {
-            subject_id,
-            ..self
-        }
+        Self { subject_id, ..self }
     }
 
     pub fn task_only(self, task_only: bool) -> Self {
@@ -309,6 +306,17 @@ impl Store {
             .query_map(params![], map_row_to_note)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(notes)
+    }
+
+    pub fn subject_note_count(&self, subject: SubjectId) -> rusqlite::Result<u64> {
+        let conn = self.conn.borrow();
+        let count = conn
+            .prepare_cached(
+                "SELECT COUNT(*) FROM notes_search
+                WHERE subject_id = ?1",
+            )?
+            .query_row(params![subject], |row| row.get::<_, u64>(0))?;
+        Ok(count)
     }
 }
 
