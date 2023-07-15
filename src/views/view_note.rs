@@ -43,7 +43,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             if e.trigger_button() != Some(MouseButton::Secondary) {
                 return;
             }
-            let coord = e.element_coordinates();
+            let coord = e.page_coordinates();
             match state.get() {
                 State::Normal => state.set(State::Dropdown(coord.x, coord.y)),
                 State::Dropdown(_, _) => state.set(State::Normal),
