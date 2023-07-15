@@ -151,10 +151,12 @@ div, textarea, input, button {
 }
 
 .task-button-place {
+    min-width: 17px;
     width: 17px;
 }
 
 .task-button {
+    min-width: 16px;
     width: 16px;
     line-height: 16px;
     border-left: 1px solid #666;
