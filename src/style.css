@@ -407,3 +407,12 @@ div, textarea, input, button {
     margin-left: 25px;
     list-style-type: decimal;
 }
+
+.markdown code {
+    background-color: #eee;
+    padding: 2px;
+    border-radius: 2px;
+
+    font-family: monospace;
+    font-size: 0.9em;
+}
