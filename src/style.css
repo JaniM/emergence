@@ -199,6 +199,7 @@ div, textarea, input, button {
     outline-style: none;
     outline-width: 0;
     white-space: pre-wrap;
+    resize: none;
 }
 
 .note-actions {
@@ -269,12 +270,10 @@ div, textarea, input, button {
     justify-content: flex-end;
 }
 
-.relative {
-    z-index: 10;
-    height: 0;
-}
-
 .select-subject {
+    position: absolute;
+    z-index: 10;
+    min-width: 200px;
     overflow: hidden;
     border: 1px solid #ccc;
     background-color: #ccd;

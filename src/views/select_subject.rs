@@ -58,40 +58,37 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         div {
             class: "select-subject-wrapper",
             div {
-                class: "relative",
+                class: "select-subject",
+                textarea {
+                    class: "search",
+                    value: "{search}",
+                    rows: 1,
+                    oninput: |e| search.set(e.value.clone()),
+                    onkeydown: onkeydown,
+                    onmounted: |e| { e.inner().set_focus(true); },
+                },
                 div {
-                    class: "select-subject",
-                    textarea {
-                        class: "search",
-                        value: "{search}",
-                        rows: 1,
-                        oninput: |e| search.set(e.value.clone()),
-                        onkeydown: onkeydown,
-                        onmounted: |e| { e.inner().set_focus(true); },
-                    },
-                    div {
-                        class: "subjects",
-                        subjects.iter().cloned().map(|subject| {
-                            let subject2 = subject.clone();
-                            rsx! {
-                                div {
-                                    key: "{subject.id}",
-                                    tabindex: 0,
-                                    onclick: move |_| {
-                                        cx.props.on_select.call(subject.clone());
-                                    },
-                                    onkeydown: move |e: KeyboardEvent| {
-                                        if e.key() == Key::Enter || e.key() == Key::Character(" ".to_string()) {
-                                            cx.props.on_select.call(subject2.clone());
-                                        }
-                                    },
-                                    "{subject.name}"
-                                }
+                    class: "subjects",
+                    subjects.iter().cloned().map(|subject| {
+                        let subject2 = subject.clone();
+                        rsx! {
+                            div {
+                                key: "{subject.id}",
+                                tabindex: 0,
+                                onclick: move |_| {
+                                    cx.props.on_select.call(subject.clone());
+                                },
+                                onkeydown: move |e: KeyboardEvent| {
+                                    if e.key() == Key::Enter || e.key() == Key::Character(" ".to_string()) {
+                                        cx.props.on_select.call(subject2.clone());
+                                    }
+                                },
+                                "{subject.name}"
                             }
-                        })
-                    }
+                        }
+                    })
                 }
-            },
+            }
         }
     })
 }
