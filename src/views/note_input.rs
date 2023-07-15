@@ -11,6 +11,7 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
+use dioxus_desktop::use_eval;
 use emergence::data::notes::{Note, NoteBuilder, NoteData, TaskState};
 
 #[derive(Props)]
@@ -101,15 +102,23 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
         YesMouse,
     }
 
+    // Resize trick
+    // Stolen from https://stackoverflow.com/a/25621277
+    let js_eval = use_eval(cx);
+    js_eval(
+        r#"const tx = document.getElementsByTagName("textarea");
+        for (let i = 0; i < tx.length; i++) {
+            tx[i].setAttribute("style", "height:0;");
+            tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
+        }"#
+        .to_string(),
+    );
+
     // TODO: Combine these states.
     let text = use_state(cx, || cx.props.initial_text.clone().unwrap_or_default());
     let subjects = use_ref(cx, || cx.props.initial_subjects.clone());
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
-
-    // TODO: Calculate rows based on horizontal overflow too.
-    // I guess there should be a nice way to do it with javascript.
-    let rows = text.matches("\n").count() as i64 + 1;
 
     let submit = || {
         let text = text.get().trim().to_string();
@@ -161,7 +170,6 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
             div {
                 class: "note-content note",
                 textarea {
-                    rows: rows,
                     value: "{text}",
                     onmounted: |e| {
                         textarea.set(Some(e.inner().clone()));

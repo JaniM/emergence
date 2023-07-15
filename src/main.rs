@@ -146,7 +146,7 @@ fn App(cx: Scope<AppProps>) -> Element {
     let zoom_level = use_state(cx, || 100);
 
     // Workaround for not being able to attach event listeners to the document.
-    let js = "
+    let js = r#"
         if (!window.eventsRegistered) {
             document.addEventListener('keydown', (e) => {
                 if (e.key === 'Tab') return;
@@ -157,7 +157,7 @@ fn App(cx: Scope<AppProps>) -> Element {
             });
             window.eventsRegistered = true;
         }
-    ";
+    "#;
     use_eval(cx)(js.to_string());
 
     let onkeydown = move |e: KeyboardEvent| match e.key() {

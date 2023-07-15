@@ -188,6 +188,8 @@ div, textarea, input, button {
 }
 
 .note textarea {
+    overflow-y: hidden;
+    padding-left: 17px;
     display: block;
     width: 100%;
     border: none;
