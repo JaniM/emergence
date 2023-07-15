@@ -6,12 +6,14 @@ use emergence::data::{
 };
 use tracing::debug;
 
-use crate::views::{note_input::EditNote, confirm_dialog::ConfirmDialog, markdown::Markdown};
+use crate::views::{confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote};
 
 #[derive(Props)]
 pub struct ViewNoteProps<'a> {
     note: Note,
     on_select_subject: EventHandler<'a, Subject>,
+    #[props(!optional)]
+    hide_subject: Option<SubjectId>,
 }
 
 pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
@@ -56,7 +58,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         state.set(State::ConfirmDelete);
     };
 
-    let actually_swlete = {
+    let actually_delete = {
         let note = note.clone();
         move |_| {
             store.read().delete_note(note.id).unwrap();
@@ -150,13 +152,20 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             ConfirmDialog {
                 title: "Delete Note",
                 message: "Are you sure you want to delete this note?",
-                on_confirm: actually_swlete,
+                on_confirm: actually_delete,
                 on_cancel: |_| state.set(State::Normal),
             }
         })
     } else {
         None
     };
+
+    let subjects = note
+        .subjects
+        .iter()
+        .copied()
+        .filter(|s| Some(*s) != cx.props.hide_subject)
+        .collect();
 
     let content = if *state.get() == State::Edit {
         rsx! {
@@ -170,7 +179,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "note-row",
                 SubjectCards {
-                    sids: note.subjects.clone(),
+                    sids: subjects,
                     on_click_subject: |subject: Subject| {
                         cx.props.on_select_subject.call(subject);
                     },

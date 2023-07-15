@@ -15,8 +15,9 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
+    let subject_id = my_subject.read().0;
     let search = NoteSearch {
-        subject_id: my_subject.read().0,
+        subject_id,
         task_only: *tasks_only,
     };
     let query = use_note_query(cx, search).notes();
@@ -73,6 +74,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
                         rsx! { ViewNote {
                             key: "{note.id.0}",
                             note: note.clone(),
+                            hide_subject: subject_id,
                             on_select_subject: |subject: Subject| {
                                 my_subject.write().0 = Some(subject.id);
                             },
