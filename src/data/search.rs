@@ -68,9 +68,7 @@ impl SearchWorker {
             let _send_result = request.send_data_to.send(result);
         });
 
-        SearchWorker {
-            sender_to_worker,
-        }
+        SearchWorker { sender_to_worker }
     }
 
     pub async fn perform_search(&self, search_text: String) -> Vec<Note> {
@@ -87,19 +85,21 @@ impl SearchWorker {
 }
 
 /// Searches the database for text.
-/// 
+///
 /// This implementation is very simple and inefficient.
 /// In the 1 million note test case, i'm getting 2 second worst case
 /// search times. This is not acceptable, but it's good enough for now.
 #[tracing::instrument(skip(conn))]
 fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>> {
     tracing::debug!("Begin");
+
     let query = format!(
         "SELECT {columns}
-        FROM notes n
-        WHERE case_insensitive_includes(text, ?1)
+        FROM notes_fts
+        INNER JOIN notes n ON notes_fts.rowid = n.rowid
+        WHERE notes_fts MATCH ?1
         ORDER BY created_at DESC
-        LIMIT 100",
+        LIMIT 50",
         columns = notes::NOTE_COLUMNS,
     );
     let mut stmt = conn.prepare_cached(&query)?;

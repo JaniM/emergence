@@ -17,7 +17,7 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             task_state INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
             modified_at INTEGER NOT NULL
-        ) WITHOUT ROWID, STRICT;
+        ) STRICT;
 
         CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
         CREATE INDEX IF NOT EXISTS notes_tasks_index ON notes(task_state ASC, created_at DESC);
@@ -59,6 +59,29 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             DELETE FROM notes_search
             WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
         END;
+
+        CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
+            text,
+            content=notes,
+            tokenize="trigram"
+        );
+
+        CREATE TRIGGER IF NOT EXISTS notes_fts_insert AFTER INSERT ON notes BEGIN
+            INSERT INTO notes_fts (rowid, text)
+            VALUES (NEW.rowid, NEW.text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS notes_fts_update AFTER UPDATE ON notes BEGIN
+            INSERT INTO notes_fts (notes_fts, rowid, text)
+            VALUES('delete', OLD.rowid, OLD.text);
+            INSERT INTO notes_fts (rowid, text)
+            VALUES (NEW.rowid, NEW.text);
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS notes_fts_delete AFTER DELETE ON notes BEGIN
+            INSERT INTO notes_fts (notes_fts, rowid)
+            VALUES('delete', OLD.rowid);
+        END;
     "#,
     )?;
 
@@ -95,5 +118,19 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
         "#,
         )?;
     }
+
+    let notes_fts_count = conn
+        .prepare_cached("SELECT COUNT(*) FROM notes_fts_idx")?
+        .query_row(params![], |row| row.get::<_, i64>(0))?;
+
+    if notes_fts_count == 0 {
+        conn.execute_batch(
+            r#"
+            INSERT INTO notes_fts (rowid, text)
+            SELECT rowid, text FROM notes;
+        "#,
+        )?;
+    }
+
     Ok(())
 }
