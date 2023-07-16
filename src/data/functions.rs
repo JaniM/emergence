@@ -15,6 +15,7 @@ impl ToSql for Blob {
 
 pub fn add_functions(conn: &Connection) -> Result<()> {
     add_concat_blobs(conn)?;
+    add_case_insensitive_includes(conn)?;
     Ok(())
 }
 
@@ -44,5 +45,22 @@ fn add_concat_blobs(conn: &Connection) -> Result<()> {
         1,
         FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
         ConcatBlobs,
+    )
+}
+
+pub fn add_case_insensitive_includes(conn: &Connection) -> Result<()> {
+    fn cmp_insensitive(a: &str, b: &str) -> bool {
+        a.to_lowercase().contains(&b.to_lowercase())
+    }
+
+    conn.create_scalar_function(
+        "case_insensitive_includes",
+        2,
+        FunctionFlags::SQLITE_UTF8 | FunctionFlags::SQLITE_DETERMINISTIC,
+        move |ctx| {
+            let haystack = ctx.get_raw(0).as_str()?;
+            let needle = ctx.get_raw(1).as_str()?;
+            Ok(cmp_insensitive(haystack, needle))
+        },
     )
 }

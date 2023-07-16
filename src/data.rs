@@ -5,6 +5,7 @@ pub mod notes;
 pub mod query;
 mod setup;
 pub mod subjects;
+mod search;
 
 use rusqlite::{params, Connection, Result};
 use std::cell::RefCell;
@@ -18,9 +19,9 @@ use subjects::SubjectId;
 
 use self::query::SubjectQuerySource;
 
-#[derive(Debug)]
 pub struct Store {
     pub conn: Rc<RefCell<rusqlite::Connection>>,
+    pub search: search::SearchWorker,
     note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
     subject_source: Rc<RefCell<SubjectQuerySource>>,
 }
@@ -36,7 +37,7 @@ impl Store {
     #[instrument()]
     pub fn new(file: ConnectionType) -> Self {
         debug!("Begin");
-        let conn = match file {
+        let conn = match &file {
             ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
             ConnectionType::File(path) => Connection::open(path).unwrap(),
         };
@@ -46,6 +47,7 @@ impl Store {
 
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
+            search: search::SearchWorker::start_search_thread(file),
             note_sources: Rc::new(RefCell::new(Vec::new())),
             subject_source: Rc::new(RefCell::new(SubjectQuerySource {
                 subjects: Default::default(),

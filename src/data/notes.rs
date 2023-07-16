@@ -322,7 +322,7 @@ impl Store {
 
 const PAGE_SIZE: usize = 200;
 
-const NOTE_COLUMNS: &'static str = "
+pub const NOTE_COLUMNS: &'static str = "
     n.id,
     n.text,
     (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
@@ -420,7 +420,7 @@ fn tasks_query(subject: Option<SubjectId>) -> String {
     search
 }
 
-fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
+pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
     let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
     let subjects = subjects_blob
         .chunks_exact(16)

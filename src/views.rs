@@ -5,3 +5,4 @@ pub mod view_note;
 pub mod note_input;
 pub mod confirm_dialog;
 pub mod markdown;
+pub mod search_view;

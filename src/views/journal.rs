@@ -6,7 +6,7 @@ use crate::{
         query::use_subject_query,
         subjects::{Subject, SubjectId},
     },
-    views::{list_notes::ListNotes, select_subject::SelectSubject},
+    views::{list_notes::ListNotes, search_view::{Search, SearchText, SearchOpen}, select_subject::SelectSubject},
 };
 
 pub struct SelectedSubject(pub Option<SubjectId>);
@@ -21,6 +21,8 @@ impl std::ops::Deref for SelectedSubject {
 
 pub fn Journal(cx: Scope) -> Element {
     use_shared_state_provider(cx, || SelectedSubject(None));
+    use_shared_state_provider(cx, || SearchText(String::new()));
+    use_shared_state_provider(cx, || SearchOpen(false));
 
     let subjects = use_subject_query(cx).subjects();
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
@@ -33,6 +35,7 @@ pub fn Journal(cx: Scope) -> Element {
 
     let show_subject_select = use_state(cx, || false);
     let tasks_only = use_state(cx, || false);
+    let show_search = use_shared_state::<SearchOpen>(cx).unwrap();
 
     let store = use_store(cx);
     let note_count = my_subject
@@ -69,6 +72,18 @@ pub fn Journal(cx: Scope) -> Element {
                                     "Delete Subject"
                                 }
                             }
+                        }
+                        button {
+                            class: if show_search.read().0 {
+                                "select-button selected"
+                            } else {
+                                "select-button"
+                            },
+                            onclick: |_| {
+                                let mut show_search = show_search.write();
+                                show_search.0 = !show_search.0;
+                            },
+                            "Search"
                         }
                         button {
                             class: if *tasks_only.get() {
@@ -108,10 +123,18 @@ pub fn Journal(cx: Scope) -> Element {
                     }
                 }
             },
-            div {
-                class: "notes",
-                ListNotes {
-                    tasks_only: *tasks_only.get(),
+            if show_search.read().0 {
+                rsx! {
+                    Search { }
+                }
+            } else {
+                rsx! {
+                    div {
+                        class: "notes",
+                        ListNotes {
+                            tasks_only: *tasks_only.get(),
+                        }
+                    }
                 }
             }
         }

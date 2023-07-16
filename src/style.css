@@ -109,7 +109,7 @@ div, textarea, input, button {
     grid-gap: 10px;
 }
 
-.note-grid .group-wrapper {
+.group-wrapper {
     display: grid;
     grid-template-columns: 100px 1fr;
     grid-gap: 10px;
@@ -414,4 +414,19 @@ div, textarea, input, button {
 
     font-family: monospace;
     font-size: 0.9em;
+}
+
+.search {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    grid-gap: 5px;
+}
+
+.search .search-input {
+    border: 1px solid #ccc;
+    background-color: #eee;
+    padding: 5px;
+    font-style: italic;
+    resize: none;
+    outline: none;
 }
