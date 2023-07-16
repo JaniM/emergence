@@ -60,8 +60,9 @@ impl SearchWorker {
             let result = match result {
                 Ok(result) => result,
                 Err(e) => {
+                    // TODO: Tell the user that the search failed.
                     tracing::error!("Failed to search for text: {}", e);
-                    continue;
+                    Vec::new()
                 }
             };
 
