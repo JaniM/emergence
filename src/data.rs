@@ -7,9 +7,9 @@ mod setup;
 pub mod subjects;
 
 use rusqlite::{params, Connection, Result};
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
-use std::{cell::RefCell, collections::HashMap};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -48,7 +48,7 @@ impl Store {
             conn: Rc::new(RefCell::new(conn)),
             note_sources: Rc::new(RefCell::new(Vec::new())),
             subject_source: Rc::new(RefCell::new(SubjectQuerySource {
-                subjects: HashMap::new(),
+                subjects: Default::default(),
                 update_callback: Vec::new(),
             })),
         };

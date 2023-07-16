@@ -1,8 +1,7 @@
-use crate::data::query::{use_subject_query, use_store};
+use crate::data::query::{use_store, use_subject_query};
 use crate::data::subjects::{Subject, SubjectId};
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
-use tracing::{instrument, trace};
 
 #[derive(Props)]
 pub struct Props<'a> {
@@ -11,7 +10,6 @@ pub struct Props<'a> {
     ignore_subjects: Vec<SubjectId>,
 }
 
-#[instrument(skip_all)]
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
     let store = use_store(cx);
     let search = use_state(cx, String::new);
@@ -23,14 +21,13 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         cx,
         (&cx.props.ignore_subjects, &*subjects, search),
         |(ignore_subjects, subjects, search)| {
-            trace!("Filtering subjects: {:?}", search);
-            let subjects = subjects
+            let mut subjects = subjects
                 .values()
                 .filter(|s| !ignore_subjects.contains(&s.id))
                 .filter(|s| s.name.to_lowercase().contains(&search.to_lowercase()))
                 .cloned()
                 .collect::<Vec<_>>();
-            trace!("Finished");
+            subjects.sort_unstable_by(|a, b| a.name.cmp(&b.name));
             std::rc::Rc::new(subjects)
         },
     );
@@ -43,11 +40,12 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
             }
 
             if e.key() == Key::Enter {
-                // TODO: Only use first subject if it's an exact match
-                let subject = if let Some(subject) = subjects.first() {
-                    subject.clone()
-                } else {
-                    store.write().add_subject(search.get().clone()).unwrap()
+                let search = search.get();
+                let subject = match subjects.first() {
+                    Some(subject) if subject.name.to_lowercase() == search.to_lowercase() => {
+                        subject.clone()
+                    }
+                    _ => store.write().add_subject(search.clone()).unwrap(),
                 };
                 cx.props.on_select.call(subject);
             }

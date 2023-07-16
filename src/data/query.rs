@@ -1,15 +1,15 @@
 use crate::data::notes::Note;
 use dioxus::prelude::*;
-use tracing::{instrument, trace};
 use std::cell::{Ref, RefCell};
-use std::collections::{HashMap, BTreeMap};
+use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
 use std::sync::Arc;
+use tracing::{instrument, trace};
 
-use super::Store;
 use super::notes::NoteSearch;
 use super::subjects::{Subject, SubjectId};
+use super::Store;
 
 pub fn use_store(cx: &ScopeState) -> &UseSharedState<super::Store> {
     use_shared_state(cx).expect("Store context not set")
@@ -73,7 +73,7 @@ impl Drop for NoteQuery {
 }
 
 pub(super) struct SubjectQuerySource {
-    pub subjects: HashMap<SubjectId, Subject>,
+    pub subjects: BTreeMap<SubjectId, Subject>,
     pub update_callback: Vec<Arc<dyn Fn()>>,
 }
 
@@ -115,7 +115,7 @@ pub fn use_subject_query<'a, 'b>(cx: &'a ScopeState) -> &'a SubjectQuery {
 }
 
 impl SubjectQuery {
-    pub fn subjects(&self) -> Ref<HashMap<SubjectId, Subject>> {
+    pub fn subjects(&self) -> Ref<BTreeMap<SubjectId, Subject>> {
         let source = self.source.borrow();
         Ref::map(source, |s| &s.subjects)
     }
@@ -161,10 +161,7 @@ impl Store {
     #[instrument(skip(self))]
     pub(super) fn update_subject_sources(&self) {
         let subjects = self.get_subjects().unwrap();
-        let subjects = subjects
-            .into_iter()
-            .map(|s| (s.id, s))
-            .collect::<HashMap<_, _>>();
+        let subjects = subjects.into_iter().map(|s| (s.id, s)).collect();
         let mut source = self.subject_source.borrow_mut();
         source.subjects = subjects;
         for callback in source.update_callback.iter() {
