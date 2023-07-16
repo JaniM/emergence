@@ -419,6 +419,7 @@ div, textarea, input, button {
 .search {
     height: 100%;
     overflow: hidden;
+    margin-top: 10px;
     display: grid;
     grid-template-rows: auto 1fr;
     grid-gap: 5px;

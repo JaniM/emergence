@@ -94,7 +94,7 @@ pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
     for i in 1..=count {
         let id = Uuid::new_v4();
         let task_state = i % 3;
-        tx.prepare(
+        tx.prepare_cached(
             "INSERT INTO notes (id, text, task_state, created_at, modified_at)
             VALUES (?1, ?2, ?3, ?4, ?4)",
         )?
@@ -104,10 +104,8 @@ pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
             task_state,
             chrono::Local::now().naive_utc().timestamp_nanos()
         ])?;
-        tx.execute(
-            "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
-            params![id, subject_ids[i % subject_xount].0],
-        )?;
+        tx.prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
+            .execute(params![id, subject_ids[i % subject_xount].0])?;
     }
     tx.commit()?;
     Ok(())
