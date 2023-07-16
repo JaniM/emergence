@@ -3,9 +3,9 @@ pub mod export;
 mod functions;
 pub mod notes;
 pub mod query;
+mod search;
 mod setup;
 pub mod subjects;
-mod search;
 
 use rusqlite::{params, Connection, Result};
 use std::cell::RefCell;
@@ -17,11 +17,12 @@ use uuid::Uuid;
 use query::NoteQuerySource;
 use subjects::SubjectId;
 
-use self::query::SubjectQuerySource;
+use self::query::{StoreEventSource, SubjectQuerySource};
 
 pub struct Store {
     pub conn: Rc<RefCell<rusqlite::Connection>>,
     pub search: search::SearchWorker,
+    update_targets: Rc<RefCell<Vec<Rc<RefCell<StoreEventSource>>>>>,
     note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
     subject_source: Rc<RefCell<SubjectQuerySource>>,
 }
@@ -53,6 +54,7 @@ impl Store {
                 subjects: Default::default(),
                 update_callback: Vec::new(),
             })),
+            update_targets: Default::default(),
         };
 
         // shove_test_data(&mut store.conn.borrow_mut()).unwrap();

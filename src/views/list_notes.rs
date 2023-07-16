@@ -1,10 +1,16 @@
 use crate::{
     data::{query::use_note_query, subjects::Subject},
-    views::{journal::SelectedSubject, note_input::CreateNote, view_note::ViewNote, search_view::SearchOpen},
+    views::{
+        journal::SelectedSubject, note_input::CreateNote, search_view::SearchOpen,
+        view_note::ViewNote,
+    },
     ShowInput,
 };
 use dioxus::prelude::*;
-use emergence::data::{notes::{Note, NoteSearch, TaskState}, query::use_store};
+use emergence::data::{
+    notes::{Note, NoteSearch, TaskState},
+    query::{use_store, use_store_event_query},
+};
 use std::collections::BTreeMap;
 
 fn group_by_date(query: &[Note]) -> Vec<(chrono::NaiveDate, String, Vec<Note>)> {
@@ -155,16 +161,22 @@ pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
     let search_open = use_shared_state::<SearchOpen>(cx).unwrap();
     let store = use_store(cx);
 
-    let query_fut = use_future(cx, (search_text,), move |(search_text,)| {
-        let search_text = search_text.trim().to_string();
-        let search = store.read().search.clone();
-        async move {
-            if search_text.is_empty() {
-                return vec![];
+    let store_event = use_store_event_query(cx);
+
+    let query_fut = use_future(
+        cx,
+        (search_text, &store_event.count()),
+        move |(search_text, _)| {
+            let search_text = search_text.trim().to_string();
+            let search = store.read().search.clone();
+            async move {
+                if search_text.is_empty() {
+                    return vec![];
+                }
+                search.perform_search(search_text).await
             }
-            search.perform_search(search_text).await
-        }
-    });
+        },
+    );
     let query = match query_fut.value() {
         Some(query) => query,
         _ => return render! { div { "Loading..." } },

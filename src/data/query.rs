@@ -1,6 +1,6 @@
 use crate::data::notes::Note;
 use dioxus::prelude::*;
-use std::cell::{Ref, RefCell};
+use std::cell::{Cell, Ref, RefCell};
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::rc::Rc;
@@ -130,6 +130,44 @@ impl Drop for SubjectQuery {
     }
 }
 
+pub struct StoreEventSource {
+    update_callback: Arc<dyn Fn()>,
+    pub counter: Cell<usize>,
+    pub(super) alive: bool,
+}
+
+pub struct StoreEventQuery {
+    source: Rc<RefCell<StoreEventSource>>,
+}
+
+pub fn use_store_event_query<'a>(cx: &'a ScopeState) -> &'a StoreEventQuery {
+    let store = use_store(cx).read();
+    cx.use_hook(|| {
+        let update_callback = cx.schedule_update();
+        let source = StoreEventSource {
+            update_callback,
+            counter: Cell::new(0),
+            alive: true,
+        };
+        let source = Rc::new(RefCell::new(source));
+        store.update_targets.borrow_mut().push(source.clone());
+        StoreEventQuery { source }
+    })
+}
+
+impl StoreEventQuery {
+    pub fn count(&self) -> usize {
+        let source = self.source.borrow();
+        source.counter.get()
+    }
+}
+
+impl Drop for StoreEventQuery {
+    fn drop(&mut self) {
+        self.source.borrow_mut().alive = false;
+    }
+}
+
 impl Store {
     #[instrument(skip_all)]
     fn add_note_source(&self, source: Rc<RefCell<NoteQuerySource>>) {
@@ -141,6 +179,14 @@ impl Store {
 
     #[instrument(skip(self))]
     pub(super) fn update_note_sources(&self) {
+        let mut events = self.update_targets.borrow_mut();
+        events.retain(|s| s.borrow().alive);
+        for event in events.iter() {
+            let event = event.borrow_mut();
+            event.counter.set(event.counter.get() + 1);
+            (event.update_callback)();
+        }
+
         let mut cache = BTreeMap::<NoteSearch, Vec<Note>>::new();
         let mut sources = self.note_sources.borrow_mut();
         sources.retain(|s| s.borrow().alive);
