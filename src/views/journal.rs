@@ -6,7 +6,11 @@ use crate::{
         query::use_subject_query,
         subjects::{Subject, SubjectId},
     },
-    views::{list_notes::ListNotes, search_view::{Search, SearchText, SearchOpen}, select_subject::SelectSubject},
+    views::{
+        list_notes::{ListNotes, ScrollToNote},
+        search_view::{Search, SearchOpen, SearchText},
+        select_subject::SelectSubject,
+    },
 };
 
 pub struct SelectedSubject(pub Option<SubjectId>);
@@ -23,9 +27,11 @@ pub fn Journal(cx: Scope) -> Element {
     use_shared_state_provider(cx, || SelectedSubject(None));
     use_shared_state_provider(cx, || SearchText(String::new()));
     use_shared_state_provider(cx, || SearchOpen(false));
+    use_shared_state_provider(cx, || ScrollToNote(None));
 
     let subjects = use_subject_query(cx).subjects();
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
+    let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
 
     let subject_name = my_subject
         .read()
@@ -48,6 +54,12 @@ pub fn Journal(cx: Scope) -> Element {
             store.read().delete_subject(id).unwrap();
         }
         subject.0 = None;
+    };
+
+    let jump_to_subject = move |subject: Option<Subject>| {
+        my_subject.write().0 = subject.map(|s| s.id);
+        scroll_to_note.write().0 = None;
+        show_subject_select.set(false);
     };
 
     render! {
@@ -98,7 +110,7 @@ pub fn Journal(cx: Scope) -> Element {
                             rsx! {
                                 button {
                                     class: "select-button",
-                                    onclick: |_| my_subject.write().0 = None,
+                                    onclick: move |_| jump_to_subject(None),
                                     "Journal"
                                 }
                             }
@@ -112,10 +124,7 @@ pub fn Journal(cx: Scope) -> Element {
                     if *show_subject_select.get() {
                         rsx! {
                             SelectSubject {
-                                on_select: |subject: Subject| {
-                                    my_subject.write().0 = Some(subject.id);
-                                    show_subject_select.set(false);
-                                },
+                                on_select: move |s| jump_to_subject(Some(s)),
                                 on_cancel: |_| show_subject_select.set(false),
                                 ignore_subjects: vec![],
                             }

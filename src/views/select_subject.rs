@@ -8,6 +8,8 @@ pub struct Props<'a> {
     on_select: EventHandler<'a, Subject>,
     on_cancel: EventHandler<'a, ()>,
     ignore_subjects: Vec<SubjectId>,
+    #[props(default = false)]
+    show_above: bool,
 }
 
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
@@ -52,39 +54,57 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         }
     };
 
+    let above_style = if cx.props.show_above {
+        "bottom: 100%;"
+    } else {
+        ""
+    };
+
+    let textarea = rsx! {
+        textarea {
+            class: "subject-search",
+            value: "{search}",
+            rows: 1,
+            oninput: |e| search.set(e.value.clone()),
+            onkeydown: onkeydown,
+            onmounted: |e| { e.inner().set_focus(true); },
+        },
+    };
+
+    let subjects_list = rsx! {
+        div {
+            class: "subjects",
+            subjects.iter().cloned().map(|subject| {
+                let subject2 = subject.clone();
+                rsx! {
+                    div {
+                        key: "{subject.id}",
+                        tabindex: 0,
+                        onclick: move |_| {
+                            cx.props.on_select.call(subject.clone());
+                        },
+                        onkeydown: move |e: KeyboardEvent| {
+                            if e.key() == Key::Enter || e.key() == Key::Character(" ".to_string()) {
+                                cx.props.on_select.call(subject2.clone());
+                            }
+                        },
+                        "{subject.name}"
+                    }
+                }
+            })
+        }
+    };
+
     cx.render(rsx! {
         div {
             class: "select-subject-wrapper",
             div {
                 class: "select-subject",
-                textarea {
-                    class: "subject-search",
-                    value: "{search}",
-                    rows: 1,
-                    oninput: |e| search.set(e.value.clone()),
-                    onkeydown: onkeydown,
-                    onmounted: |e| { e.inner().set_focus(true); },
-                },
-                div {
-                    class: "subjects",
-                    subjects.iter().cloned().map(|subject| {
-                        let subject2 = subject.clone();
-                        rsx! {
-                            div {
-                                key: "{subject.id}",
-                                tabindex: 0,
-                                onclick: move |_| {
-                                    cx.props.on_select.call(subject.clone());
-                                },
-                                onkeydown: move |e: KeyboardEvent| {
-                                    if e.key() == Key::Enter || e.key() == Key::Character(" ".to_string()) {
-                                        cx.props.on_select.call(subject2.clone());
-                                    }
-                                },
-                                "{subject.name}"
-                            }
-                        }
-                    })
+                style: above_style,
+                if cx.props.show_above {
+                    rsx! { subjects_list, textarea }
+                } else {
+                    rsx! { textarea, subjects_list }
                 }
             }
         }

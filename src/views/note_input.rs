@@ -205,6 +205,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                             textarea.get().as_ref().unwrap().set_focus(true);
                         },
                         ignore_subjects: subjects.read().clone(),
+                        show_above: true
                     }
                 }
             }

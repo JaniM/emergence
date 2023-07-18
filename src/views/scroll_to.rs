@@ -12,7 +12,10 @@ pub fn ScrollTo<'a>(cx: Scope<'a, ScrollToProps<'a>>) -> Element<'a> {
             onmounted: move |e| {
                 e.inner().scroll_to(ScrollBehavior::Instant);
             },
-            &cx.props.children
+            div {
+                class: "scroll-to-flash",
+                &cx.props.children
+            }
         }
     }
 }

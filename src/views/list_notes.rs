@@ -8,12 +8,14 @@ use crate::{
 };
 use dioxus::prelude::*;
 use emergence::data::{
-    notes::{Note, NoteSearch, TaskState},
+    notes::{Note, NoteId, NoteSearch, TaskState},
     query::{use_store, use_store_event_query},
 };
 use std::collections::BTreeMap;
 
 type NoteGroup<T> = (chrono::NaiveDate, String, Vec<T>);
+
+pub struct ScrollToNote(pub Option<NoteId>);
 
 fn group_by_date(query: &[Note]) -> Vec<NoteGroup<Note>> {
     let mut groups = BTreeMap::new();
@@ -46,6 +48,7 @@ fn reverse_groups<T>(groups: &mut [NoteGroup<T>]) {
 pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
+    let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
 
     let subject_id = my_subject.read().0;
     let subject_id_key = subject_id.map_or_else(|| "none".to_string(), |id| id.0.to_string());
@@ -95,30 +98,51 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
                 nodes
                     .into_iter()
                     .map(|note| {
-                        rsx! { ViewNote {
-                            key: "{note.id.0}",
-                            note: note.clone(),
-                            hide_subject: subject_id,
-                            on_select_subject: |subject: Subject| {
-                                my_subject.write().0 = Some(subject.id);
-                            },
-                        } }
+                        let id = note.id;
+                        (
+                            id,
+                            rsx! { ViewNote {
+                                key: "{note.id.0}",
+                                note: note.clone(),
+                                hide_subject: subject_id,
+                                on_select_subject: move |subject: Subject| {
+                                    my_subject.write().0 = Some(subject.id);
+                                    scroll_to_note.write().0 = Some(id);
+                                },
+                            } },
+                        )
                     })
                     .collect::<Vec<_>>(),
             )
         })
         .collect::<Vec<_>>();
 
-    if let Some(last_group) = groups.last_mut() {
+    if let Some(note_id) = scroll_to_note.read().0 {
+        let key = format!("scroll-to-{subject_id_key}");
+        for (_, _, group) in groups.iter_mut() {
+            let idx = group.iter().position(|(id, _)| *id == note_id);
+            if let Some(idx) = idx {
+                let old = std::mem::replace(&mut group[idx].1, rsx! { div {} });
+                let new = rsx! {
+                    ScrollTo {
+                        key: "{key}",
+                        old
+                    }
+                };
+                group[idx].1 = new;
+                break;
+            }
+        }
+    } else if let Some(last_group) = groups.last_mut() {
         if let Some(last_note) = last_group.2.pop() {
-            let key = query.first().unwrap().id.0;
+            let id = last_note.0.0;
             let new_last = rsx! {
                 ScrollTo {
-                    key: "scroll-to-{key}-{subject_id_key}",
-                    last_note
+                    key: "scroll-to-{subject_id_key}-{id}",
+                    last_note.1
                 }
             };
-            last_group.2.push(new_last);
+            last_group.2.push((last_note.0, new_last));
         }
     }
 
@@ -169,7 +193,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
                                     },
                                     div {
                                         class: "group",
-                                        nodes.into_iter()
+                                        nodes.into_iter().map(|(_, node)| node)
                                     }
                                 }
                             }
@@ -196,6 +220,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
 pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let search_open = use_shared_state::<SearchOpen>(cx).unwrap();
+    let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
     let store = use_store(cx);
 
     let store_event = use_store_event_query(cx);
@@ -234,8 +259,9 @@ pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
                             key: "{note.id.0}",
                             note: note.clone(),
                             hide_subject: None,
-                            on_select_subject: |subject: Subject| {
+                            on_select_subject: move |subject: Subject| {
                                 search_open.write().0 = false;
+                                scroll_to_note.write().0 = Some(note.id);
                                 my_subject.write().0 = Some(subject.id);
                             },
                         } }

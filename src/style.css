@@ -113,11 +113,11 @@ div, textarea, input, button {
 }
 
 .place-at-end {
+    width: 100%;
     min-height: 100%;
     display: flex;
     flex-flow: column;
     justify-content: flex-end;
-    align-items: flex-end;
 }
 
 .note-grid {
@@ -452,4 +452,28 @@ div, textarea, input, button {
     font-style: italic;
     resize: none;
     outline: none;
+}
+
+.scroll-to {
+    padding-top: 45vh;
+    margin-top: -45vh;
+}
+
+.scroll-to-flash {
+    animation-duration: 2s;
+    animation-name: scroll-to-flash;
+}
+
+@keyframes scroll-to-flash {
+    from {
+        box-shadow: 0;
+    }
+
+    25% {
+        box-shadow: 0px 0px 5px 5px #c29232;
+    }
+
+    to {
+        box-shadow: 0;
+    }
 }
