@@ -95,15 +95,33 @@ div, textarea, input, button {
 }
 
 .journal .notes {
-    overflow-y: scroll;
+    max-height: 100%;
     display: grid;
+    overflow: hidden;
 }
 
 .note-grid-wrapper {
-    margin-top: 10px;
+    height: 100%;
+    display: grid;
+    grid-template-rows: 1fr auto;
+    gap: 10px;
+    overflow: hidden;
+}
+
+.note-grid-scroll {
+    overflow-y: scroll;
+}
+
+.place-at-end {
+    min-height: 100%;
+    display: flex;
+    flex-flow: column;
+    justify-content: flex-end;
+    align-items: flex-end;
 }
 
 .note-grid {
+    margin-top: 10px;
     display: grid;
     grid-template-columns: 1fr;
     grid-gap: 10px;

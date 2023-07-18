@@ -1,8 +1,8 @@
 use crate::{
     data::{query::use_note_query, subjects::Subject},
     views::{
-        journal::SelectedSubject, note_input::CreateNote, search_view::SearchOpen,
-        view_note::ViewNote,
+        journal::SelectedSubject, note_input::CreateNote, scroll_to::ScrollTo,
+        search_view::SearchOpen, view_note::ViewNote,
     },
     ShowInput,
 };
@@ -13,7 +13,9 @@ use emergence::data::{
 };
 use std::collections::BTreeMap;
 
-fn group_by_date(query: &[Note]) -> Vec<(chrono::NaiveDate, String, Vec<Note>)> {
+type NoteGroup<T> = (chrono::NaiveDate, String, Vec<T>);
+
+fn group_by_date(query: &[Note]) -> Vec<NoteGroup<Note>> {
     let mut groups = BTreeMap::new();
     for node in query.iter() {
         let date = node.created_at.naive_local().date();
@@ -31,19 +33,29 @@ fn group_by_date(query: &[Note]) -> Vec<(chrono::NaiveDate, String, Vec<Note>)> 
     groups
 }
 
+/// Reverse the order of the groups and the notes in each group.
+/// This exists temporarily to test if chronological order is better.
+fn reverse_groups<T>(groups: &mut [NoteGroup<T>]) {
+    groups.reverse();
+    for (_, _, notes) in groups.iter_mut() {
+        notes.reverse();
+    }
+}
+
 #[inline_props]
 pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
 
     let subject_id = my_subject.read().0;
+    let subject_id_key = subject_id.map_or_else(|| "none".to_string(), |id| id.0.to_string());
     let search = NoteSearch {
         subject_id,
         task_only: *tasks_only,
     };
     let query = use_note_query(cx, search).notes();
 
-    let groups = if !*tasks_only {
+    let mut groups = if !*tasks_only {
         group_by_date(&query)
     } else {
         let mut done = vec![];
@@ -72,6 +84,8 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
         undone
     };
 
+    reverse_groups(&mut groups);
+
     let mut groups = groups
         .into_iter()
         .map(|(date, key, nodes)| {
@@ -95,9 +109,17 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
         })
         .collect::<Vec<_>>();
 
-    let today = chrono::Local::now().naive_local().date();
-    if groups.is_empty() || groups[0].0 != today {
-        groups.insert(0, (today, "today".to_string(), vec![]));
+    if let Some(last_group) = groups.last_mut() {
+        if let Some(last_note) = last_group.2.pop() {
+            let key = query.first().unwrap().id.0;
+            let new_last = rsx! {
+                ScrollTo {
+                    key: "scroll-to-{key}-{subject_id_key}",
+                    last_note
+                }
+            };
+            last_group.2.push(new_last);
+        }
     }
 
     let add_note = if show_input.read().0 {
@@ -123,33 +145,48 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
         }
     };
 
-    groups[0].2.insert(0, add_note);
-
     render! {
         div {
             class: "note-grid-wrapper",
             div {
-                class: "note-grid",
-                groups.into_iter().map(|(date, key, nodes)| {
-                    let date_string = date.format("%Y-%m-%d");
-                    rsx! {
-                        div {
-                            key: "{key}",
-                            class: "group-wrapper",
-                            div {
-                                class: "date-wrapper",
+                class: "note-grid-scroll",
+                div {
+                    class: "place-at-end",
+                    div {
+                        class: "note-grid",
+                        groups.into_iter().map(|(date, key, nodes)| {
+                            let date_string = date.format("%Y-%m-%d");
+                            rsx! {
                                 div {
-                                    class: "date",
-                                    "{date_string}"
+                                    key: "{key}",
+                                    class: "group-wrapper",
+                                    div {
+                                        class: "date-wrapper",
+                                        div {
+                                            class: "date",
+                                            "{date_string}"
+                                        }
+                                    },
+                                    div {
+                                        class: "group",
+                                        nodes.into_iter()
+                                    }
                                 }
-                            },
-                            div {
-                                class: "group",
-                                nodes.into_iter()
                             }
-                        }
+                        })
                     }
-                })
+                }
+            }
+            div {
+                class: "group-wrapper",
+                style: "margin-bottom: 10px;",
+                div {
+                    class: "date-wrapper",
+                },
+                div {
+                    class: "group",
+                    add_note
+                }
             }
         }
     }
@@ -212,27 +249,30 @@ pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
         div {
             class: "note-grid-wrapper",
             div {
-                class: "note-grid",
-                groups.into_iter().map(|(date, key, nodes)| {
-                    let date_string = date.format("%Y-%m-%d");
-                    rsx! {
-                        div {
-                            key: "{key}",
-                            class: "group-wrapper",
+                class: "note-grid-scroll",
+                div {
+                    class: "note-grid",
+                    groups.into_iter().map(|(date, key, nodes)| {
+                        let date_string = date.format("%Y-%m-%d");
+                        rsx! {
                             div {
-                                class: "date-wrapper",
+                                key: "{key}",
+                                class: "group-wrapper",
                                 div {
-                                    class: "date",
-                                    "{date_string}"
+                                    class: "date-wrapper",
+                                    div {
+                                        class: "date",
+                                        "{date_string}"
+                                    }
+                                },
+                                div {
+                                    class: "group",
+                                    nodes.into_iter()
                                 }
-                            },
-                            div {
-                                class: "group",
-                                nodes.into_iter()
                             }
                         }
-                    }
-                })
+                    })
+                }
             }
         }
     }
