@@ -103,16 +103,26 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     }
 
     // Resize trick
-    // Stolen from https://stackoverflow.com/a/25621277
+    // Adapted from https://stackoverflow.com/a/25621277
     let js_eval = use_eval(cx);
-    js_eval(
-        r#"const tx = document.getElementsByTagName("textarea");
-        for (let i = 0; i < tx.length; i++) {
-            tx[i].setAttribute("style", "height:0;");
-            tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
-        }"#
-        .to_string(),
-    );
+    let size_textareas = move || {
+        js_eval(
+            r#"const tx = document.getElementsByTagName("textarea");
+            for (let i = 0; i < tx.length; i++) {
+                const parent = tx[i].parentElement;
+                const parentStyle = window.getComputedStyle(parent, null);
+                const parentPadding =
+                    parseInt(parentStyle.getPropertyValue('padding-bottom'))
+                    + parseInt(parentStyle.getPropertyValue('padding-top'));
+                tx[i].parentElement.setAttribute("style",
+                    "height:" + (tx[i].scrollHeight + parentPadding) + "px;");
+                tx[i].setAttribute("style", "height:0;");
+                tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
+                tx[i].parentElement.setAttribute("style", "height: fit-content;");
+            }"#
+            .to_string(),
+        )
+    };
 
     // TODO: Combine these states.
     let text = use_state(cx, || cx.props.initial_text.clone().unwrap_or_default());
@@ -171,11 +181,16 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                 class: "note-content note",
                 textarea {
                     value: "{text}",
-                    onmounted: |e| {
+                    rows: 2,
+                    onmounted: move |e| {
                         textarea.set(Some(e.inner().clone()));
                         e.inner().set_focus(true);
+                        size_textareas();
                     },
-                    oninput: |e| text.set(e.value.clone()),
+                    oninput: move |e| {
+                        text.set(e.value.clone());
+                        size_textareas();
+                    },
                     onkeypress: onkeypress,
                 }
             },

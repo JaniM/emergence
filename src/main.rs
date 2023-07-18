@@ -29,7 +29,7 @@ struct Args {
     db_file: Option<PathBuf>,
 
     /// Construct a sample database.
-    /// 
+    ///
     /// This will NOT overwrite an existing database.
     #[arg(long, value_name = "row count")]
     sample: Option<usize>,
@@ -86,14 +86,20 @@ fn main() {
     }
 
     if let Some(export_file) = args.export {
-        info!("Exporting to {}, this may take a long time", export_file.display());
+        info!(
+            "Exporting to {}, this may take a long time",
+            export_file.display()
+        );
         data::export::export(db_file, export_file);
         info!("Finished exporting");
         return;
     }
 
     if let Some(import_file) = args.import {
-        info!("Importing from {}, this may take a long time", import_file.display());
+        info!(
+            "Importing from {}, this may take a long time",
+            import_file.display()
+        );
         data::export::import(db_file, import_file);
         info!("Finished importing");
         return;
@@ -112,12 +118,17 @@ fn main() {
 
     info!("Starting app");
 
+    #[cfg(not(debug_assertions))]
+    let disable_context_menu = true;
+    #[cfg(debug_assertions)]
+    let disable_context_menu = false;
+
     // launch the dioxus app in a webview
     dioxus_desktop::launch_with_props(
         App,
         AppProps { db_file },
         dioxus_desktop::Config::new()
-            .with_disable_context_menu(true)
+            .with_disable_context_menu(disable_context_menu)
             .with_window(
                 dioxus_desktop::WindowBuilder::new()
                     .with_title("Emergence Notes")
@@ -149,7 +160,8 @@ fn App(cx: Scope<AppProps>) -> Element {
     let js = r#"
         if (!window.eventsRegistered) {
             document.addEventListener('keydown', (e) => {
-                if (e.key === 'Tab') return;
+                // Shift+Tab is recognized ss Unidentified key, so we have to check for code
+                if (e.code === 'Tab') return;
                 if (e.target.className === 'magic-capture') return;
                 document
                     .querySelector('.magic-capture')

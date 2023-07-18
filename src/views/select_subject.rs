@@ -65,6 +65,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
             class: "subject-search",
             value: "{search}",
             rows: 1,
+            tabindex: 100,
             oninput: |e| search.set(e.value.clone()),
             onkeydown: onkeydown,
             onmounted: |e| { e.inner().set_focus(true); },
@@ -79,7 +80,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
                 rsx! {
                     div {
                         key: "{subject.id}",
-                        tabindex: 0,
+                        tabindex: 101,
                         onclick: move |_| {
                             cx.props.on_select.call(subject.clone());
                         },
