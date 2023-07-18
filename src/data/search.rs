@@ -3,6 +3,8 @@ use std::thread;
 use tokio::sync::mpsc::{error::TryRecvError, unbounded_channel, UnboundedSender};
 use tokio::sync::oneshot;
 
+use crate::data::tfidf;
+
 use super::functions::add_functions;
 use super::notes;
 use super::{
@@ -10,8 +12,13 @@ use super::{
     ConnectionType,
 };
 
+enum Query {
+    Search(String),
+    Similar(String),
+}
+
 struct SearchRequest {
-    query: String,
+    query: Query,
     send_data_to: oneshot::Sender<Vec<NoteData>>,
 }
 
@@ -56,7 +63,10 @@ impl SearchWorker {
                 }
             };
 
-            let result = search_text(&conn, &request.query);
+            let result = match request.query {
+                Query::Search(text) => search_text(&conn, &text),
+                Query::Similar(text) => find_similar(&conn, &text),
+            };
             let result = match result {
                 Ok(result) => result,
                 Err(e) => {
@@ -73,9 +83,17 @@ impl SearchWorker {
     }
 
     pub async fn perform_search(&self, search_text: String) -> Vec<Note> {
+        self.perform(Query::Search(search_text)).await
+    }
+
+    pub async fn find_similar(&self, search_text: String) -> Vec<Note> {
+        self.perform(Query::Similar(search_text)).await
+    }
+
+    async fn perform(&self, query: Query) -> Vec<Note> {
         let (sender_to_main, receiver_to_main) = oneshot::channel();
         let query = SearchRequest {
-            query: search_text,
+            query,
             send_data_to: sender_to_main,
         };
         self.sender_to_worker.send(query).unwrap();
@@ -99,7 +117,7 @@ fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>>
         FROM notes_fts
         INNER JOIN notes n ON notes_fts.rowid = n.rowid
         WHERE notes_fts MATCH ?1
-        ORDER BY created_at DESC
+        ORDER BY rank DESC
         LIMIT 50",
         columns = notes::NOTE_COLUMNS,
     );
@@ -116,4 +134,21 @@ fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>>
 
     tracing::debug!("Found {} notes", notes.len());
     Ok(notes)
+}
+
+/// Find similar notes based on the TF-IDF algorithm.
+fn find_similar(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>> {
+    let good_word_xount = 5;
+    let best_words = tfidf::best_words(conn, text)?;
+
+    let end_idx = std::cmp::min(best_words.len(), good_word_xount);
+    if end_idx == 0 {
+        return Ok(Vec::new());
+    }
+
+    let search = best_words[..end_idx].join(" OR ");
+
+    tracing::debug!("Searching for: {}", search);
+
+    search_text(conn, &search)
 }

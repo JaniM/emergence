@@ -1,6 +1,8 @@
 use rusqlite::{params, Connection, Result};
 
-pub fn setup_tables(conn: &Connection) -> Result<()> {
+use super::tfidf;
+
+pub fn setup_tables(conn: &mut Connection) -> Result<()> {
     conn.execute_batch(
         r#"
         PRAGMA foreign_keys = ON;
@@ -82,6 +84,11 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             INSERT INTO notes_fts (notes_fts, rowid)
             VALUES('delete', OLD.rowid);
         END;
+
+        CREATE TABLE IF NOT EXISTS term_occurrences (
+            term TEXT PRIMARY KEY,
+            count INTEGER NOT NULL
+        ) WITHOUT ROWID, STRICT;
     "#,
     )?;
 
@@ -130,6 +137,16 @@ pub fn setup_tables(conn: &Connection) -> Result<()> {
             SELECT rowid, text FROM notes;
         "#,
         )?;
+    }
+
+    let text_occurences_count = conn
+        .prepare_cached("SELECT COUNT(*) FROM term_occurrences")?
+        .query_row(params![], |row| row.get::<_, i64>(0))?;
+
+    if text_occurences_count == 0 {
+        let tx = conn.transaction()?;
+        tfidf::fill_word_occurence_table(&tx)?;
+        tx.commit()?;
     }
 
     Ok(())

@@ -6,6 +6,7 @@ pub mod query;
 mod search;
 mod setup;
 pub mod subjects;
+pub mod tfidf;
 
 use rusqlite::{params, Connection, Result};
 use std::cell::RefCell;
@@ -38,13 +39,13 @@ impl Store {
     #[instrument()]
     pub fn new(file: ConnectionType) -> Self {
         debug!("Begin");
-        let conn = match &file {
+        let mut conn = match &file {
             ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
             ConnectionType::File(path) => Connection::open(path).unwrap(),
         };
 
         functions::add_functions(&conn).unwrap();
-        setup::setup_tables(&conn).unwrap();
+        setup::setup_tables(&mut conn).unwrap();
 
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),

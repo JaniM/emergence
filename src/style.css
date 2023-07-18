@@ -52,7 +52,7 @@ div, textarea, input, button {
 
     max-width: 800px;
     position: relative;
-    left: calc(max(50% - 400px - 50px, 0px));
+    /* left: calc(max(50% - 400px - 50px, 0px)); */
 }
 
 .journal .header {
@@ -476,4 +476,28 @@ div, textarea, input, button {
     to {
         box-shadow: 0;
     }
+}
+
+.right-side-popup {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: 350px;
+    height: 100%;
+    padding: 10px;
+    background-color: #ddd;
+    border-left: 1px solid #ccc;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    z-index: 1;
+    gap: 5px;
+}
+
+.right-side-popup .right-side-popup-header {
+    font-size: 1.2em;
+    font-weight: bold;
+    text-align: center;
 }

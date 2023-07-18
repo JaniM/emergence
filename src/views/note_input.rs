@@ -5,7 +5,7 @@ use crate::{
         query::use_store,
         subjects::{Subject, SubjectId},
     },
-    views::{select_subject::SelectSubject, view_note::SubjectCards},
+    views::{select_subject::SelectSubject, similar_notes::FindSimilar, view_note::SubjectCards},
 };
 use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
@@ -223,6 +223,9 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                         show_above: true
                     }
                 }
+            }
+            FindSimilar {
+                text: text.get().clone(),
             }
         }
     })
