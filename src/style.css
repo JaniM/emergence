@@ -62,7 +62,7 @@ div, textarea, input, button {
 }
 
 .journal .header .title {
-    font-size: 1.6em;
+    font-size: 1.4em;
     padding-left: 15px;
 }
 
@@ -283,7 +283,7 @@ div, textarea, input, button {
     grid-gap: 5px;
 }
 
-.select-subject .search {
+.select-subject .subject-search {
     width: auto;
     resize: none;
 }
@@ -408,12 +408,14 @@ div, textarea, input, button {
 }
 
 .markdown code {
-    background-color: #eee;
-    padding: 2px;
-    border-radius: 2px;
-
     font-family: monospace;
     font-size: 0.9em;
+}
+
+.markdown pre code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: medium;
 }
 
 .search {

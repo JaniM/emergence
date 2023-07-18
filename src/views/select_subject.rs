@@ -58,7 +58,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
             div {
                 class: "select-subject",
                 textarea {
-                    class: "search",
+                    class: "subject-search",
                     value: "{search}",
                     rows: 1,
                     oninput: |e| search.set(e.value.clone()),
