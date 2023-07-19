@@ -26,6 +26,36 @@ fn trim_punctuation(word: &str) -> &str {
     &word[start..end]
 }
 
+fn naive_singularize(word: &str) -> &str {
+    if word.ends_with('s') {
+        &word[..word.len() - 1]
+    } else {
+        word
+    }
+}
+
+fn ignore_code_blocks(text: &str) -> String {
+    let mut result = String::new();
+    let mut in_code_block = false;
+    for line in text.lines() {
+        if line.trim_start().starts_with("```") {
+            in_code_block = !in_code_block;
+        }
+        if !in_code_block {
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    result
+}
+
+fn normalize_text(text: &str) -> String {
+    let text = ignore_code_blocks(text);
+    let text = text.replace(|c: char| !c.is_alphabetic(), " ");
+    let text = text.to_lowercase();
+    text
+}
+
 /// Counts the number of times each word occurs in the text.
 /// Returns a map from words to counts.
 /// Words are trimmed of punctuation before counting.
@@ -34,10 +64,13 @@ fn count_word_occurrences(text: &str) -> BTreeMap<&str, usize> {
     let mut counts = BTreeMap::new();
     for word in text.split_whitespace() {
         let word = trim_punctuation(word);
-        if word.is_empty() {
+        let word = naive_singularize(word);
+        if word.len() < 3 {
+            // We can't search for words shorter than 3 characters
             continue;
         }
-        if word.len() > 50 {
+        if word.len() > 30 {
+            // Extremely long words are probably not real words
             continue;
         }
 
@@ -52,9 +85,7 @@ pub fn best_words<'a, 'b>(
 ) -> rusqlite::Result<Vec<String>> {
     use rusqlite::OptionalExtension;
 
-    // Remove punctuation and normalize to lowercase
-    let text = text.replace(|c: char| !c.is_alphabetic(), " ");
-    let text = text.to_lowercase();
+    let text = normalize_text(text);
 
     let total_notes: usize = conn.query_row("SELECT COUNT(*) FROM notes;", [], |row| row.get(0))?;
 
@@ -72,10 +103,11 @@ pub fn best_words<'a, 'b>(
         let doc_count = stmt
             .query_row([word], |row| row.get::<_, i64>(1))
             .optional()?;
-        let inverse_doc_frequency = if let Some(doc_count) = doc_count {
-            (total_notes as f64 / (1 + doc_count) as f64).ln()
-        } else {
-            0.0
+
+        // If the word is not in the database, we can skip it.
+        let inverse_doc_frequency = match doc_count {
+            Some(c) if c > 0 => (total_notes as f64 / c as f64).ln(),
+            _ => continue,
         };
 
         let tfidf = term_frequency * inverse_doc_frequency;
@@ -97,10 +129,28 @@ pub fn insert_word_occurences(conn: &rusqlite::Connection, text: &str) -> rusqli
         ON CONFLICT(term) DO UPDATE SET count = count + excluded.count;",
     )?;
 
-    let counts = count_word_occurrences(text);
+    let text = normalize_text(text);
+    let counts = count_word_occurrences(&text);
     for (word, count) in counts {
         if count > 0 {
             stmt.execute((word, 1))?;
+        }
+    }
+
+    Ok(())
+}
+
+pub fn remove_word_occurences(conn: &rusqlite::Connection, text: &str) -> rusqlite::Result<()> {
+    let mut stmt = conn.prepare_cached(
+        "INSERT INTO term_occurrences (term, count) VALUES (?1, 0)
+        ON CONFLICT(term) DO UPDATE SET count = count - 1;",
+    )?;
+
+    let text = normalize_text(text);
+    let counts = count_word_occurrences(&text);
+    for (word, count) in counts {
+        if count > 0 {
+            stmt.execute((word,))?;
         }
     }
 
@@ -123,4 +173,47 @@ pub fn fill_word_occurence_table(conn: &rusqlite::Connection) -> rusqlite::Resul
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod test {
+    use crate::data::{
+        notes::{NoteBuilder, NoteData},
+        ConnectionType, Store,
+    };
+
+    use super::*;
+
+    #[test]
+    fn test_best_word_solve() -> rusqlite::Result<()> {
+        let store = Store::new(ConnectionType::InMemory);
+        let note1 = store.add_note(NoteBuilder::new(
+            "This has words we care about: xkcd".to_string(),
+        ))?;
+        store.add_note(NoteBuilder::new(
+            "This does not have useful words".to_string(),
+        ))?;
+
+        {
+            let conn = store.conn.borrow();
+            let words = best_words(&conn, "xkcd foo word")?;
+            assert_eq!(words, vec!["xkcd", "word"]);
+        }
+
+        store.update_note(
+            NoteData {
+                text: "This no longer has words we care about".to_string(),
+                ..(&*note1).clone()
+            }
+            .to_note(),
+        )?;
+
+        {
+            let conn = store.conn.borrow();
+            let words = best_words(&conn, "xkcd foo word")?;
+            assert_eq!(words, vec!["word"]);
+        }
+
+        Ok(())
+    }
 }

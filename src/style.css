@@ -493,7 +493,7 @@ div, textarea, input, button {
     justify-content: flex-start;
     align-items: stretch;
     z-index: 1;
-    gap: 5px;
+    gap: 10px;
 }
 
 .right-side-popup .right-side-popup-header {

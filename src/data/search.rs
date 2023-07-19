@@ -117,7 +117,7 @@ fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>>
         FROM notes_fts
         INNER JOIN notes n ON notes_fts.rowid = n.rowid
         WHERE notes_fts MATCH ?1
-        ORDER BY rank DESC
+        ORDER BY rank
         LIMIT 50",
         columns = notes::NOTE_COLUMNS,
     );

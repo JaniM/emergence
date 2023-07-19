@@ -5,6 +5,8 @@ use std::rc::Rc;
 use tracing::{debug, instrument};
 use uuid::Uuid;
 
+use crate::data::tfidf;
+
 use super::{subjects::SubjectId, Store};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -159,6 +161,8 @@ impl Store {
                 .execute(params![id, subject.0])?;
             }
 
+            tfidf::insert_word_occurences(&tx, &note.text)?;
+
             tx.commit()?;
         }
 
@@ -208,6 +212,18 @@ impl Store {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
 
+            let old_text = tx
+                .prepare_cached(
+                    "SELECT text FROM notes
+                    WHERE id = ?1",
+                )?
+                .query_row(params![note.id.0], |row| row.get::<_, String>(0))?;
+
+            if &old_text != &note.text {
+                tfidf::remove_word_occurences(&tx, &old_text)?;
+                tfidf::insert_word_occurences(&tx, &note.text)?;
+            }
+
             tx.prepare_cached(
                 "UPDATE notes
                 SET text = ?2,
@@ -249,6 +265,15 @@ impl Store {
         {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
+
+            let old_text = tx
+                .prepare_cached(
+                    "SELECT text FROM notes
+                    WHERE id = ?1",
+                )?
+                .query_row(params![note.0], |row| row.get::<_, String>(0))?;
+
+            tfidf::remove_word_occurences(&tx, &old_text)?;
 
             tx.prepare_cached(
                 "DELETE FROM notes_subjects

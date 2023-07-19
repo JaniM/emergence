@@ -1,5 +1,5 @@
 use dioxus::prelude::*;
-use emergence::data::query::use_store;
+use emergence::data::query::{use_store, use_store_event_query};
 
 use crate::views::view_note::ViewNote;
 
@@ -7,7 +7,9 @@ use crate::views::view_note::ViewNote;
 pub fn FindSimilar(cx: Scope, text: String) -> Element {
     let search = use_store(cx).read().search.clone();
 
-    let similar = use_future(cx, (text,), |(text,)| async move {
+    let counter = use_store_event_query(cx).count();
+
+    let similar = use_future(cx, (text, &counter), |(text, _)| async move {
         search.find_similar(text.clone()).await
     });
 
