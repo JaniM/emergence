@@ -369,7 +369,7 @@ const NOTE_LIST_ALL: &'static str = formatcp!(
 const NOTE_SEARCH_BY_SUBJECT: &'static str = formatcp!(
     r#"SELECT {columns}
     FROM notes_search s
-    INNER JOIN notes n ON s.note_id = n.id
+    INNER JOIN notes n ON s.note_id = n.rowid
     WHERE s.subject_id = ?1
     ORDER BY s.created_at DESC
     LIMIT {page}"#,
@@ -431,7 +431,7 @@ fn tasks_query(subject: Option<SubjectId>) -> String {
         page = PAGE_SIZE,
         subject_clause = if subject.is_some() {
             "INNER JOIN notes_search 
-            ON notes_search.note_id = n.id AND notes_search.subject_id = ?1"
+            ON notes_search.note_id = n.rowid AND notes_search.subject_id = ?1"
         } else {
             ""
         }

@@ -322,7 +322,6 @@ mod test {
         let note1 =
             store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
 
-        assert!(store.delete_subject(subject1.id).is_err());
         assert!(store.delete_subject(subject2.id).is_ok());
 
         store.delete_note(note1.id)?;

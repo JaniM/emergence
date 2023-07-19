@@ -13,7 +13,8 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
         ) WITHOUT ROWID, STRICT;
 
         CREATE TABLE IF NOT EXISTS notes (
-            id BLOB PRIMARY KEY,
+            rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+            id BLOB,
             text TEXT NOT NULL,
             -- 0 = not a task, 1 = incomplete, 2 = complete
             task_state INTEGER NOT NULL DEFAULT 0,
@@ -21,6 +22,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             modified_at INTEGER NOT NULL
         ) STRICT;
 
+        CREATE UNIQUE INDEX IF NOT EXISTS notes_id_index ON notes (id);
         CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
         CREATE INDEX IF NOT EXISTS notes_tasks_index ON notes(task_state ASC, created_at DESC);
 
@@ -28,18 +30,15 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
         CREATE TABLE IF NOT EXISTS notes_subjects (
             note_id BLOB NOT NULL,
             subject_id BLOB NOT NULL,
-            PRIMARY KEY (note_id, subject_id),
-            FOREIGN KEY (note_id) REFERENCES notes(id),
-            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+            PRIMARY KEY (note_id, subject_id)
         ) WITHOUT ROWID, STRICT;
 
         CREATE TABLE IF NOT EXISTS notes_search (
-            note_id BLOB NOT NULL,
+            rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+            note_id INTEGER NOT NULL,
             subject_id BLOB NOT NULL,
             created_at INTEGER NOT NULL,
-            task_state INTEGER NOT NULL DEFAULT 0,
-            FOREIGN KEY (note_id) REFERENCES notes(id),
-            FOREIGN KEY (subject_id) REFERENCES subjects(id)
+            task_state INTEGER NOT NULL DEFAULT 0
         ) STRICT;
 
         CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at);
@@ -50,7 +49,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             INSERT INTO notes_search (
                 note_id, subject_id, task_state, created_at)
             VALUES (
-                NEW.note_id,
+                (SELECT rowid FROM notes WHERE id = NEW.note_id),
                 NEW.subject_id,
                 (SELECT task_state FROM notes WHERE id = NEW.note_id),
                 (SELECT created_at FROM notes WHERE id = NEW.note_id)
@@ -59,7 +58,8 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
 
         CREATE TRIGGER IF NOT EXISTS notes_search_delete AFTER DELETE ON notes_subjects BEGIN
             DELETE FROM notes_search
-            WHERE note_id = OLD.note_id AND subject_id = OLD.subject_id;
+            WHERE note_id = (SELECT rowid FROM notes WHERE id = OLD.note_id)
+            AND subject_id = OLD.subject_id;
         END;
 
         CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
@@ -92,21 +92,6 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
     "#,
     )?;
 
-    // Add notes.task_state column if it doesn't exist
-    let task_state_exists = conn
-        .prepare_cached(
-            "SELECT 1 FROM pragma_table_info('notes')
-            WHERE name = 'task_state'",
-        )?
-        .query_row(params![], |_| Ok(true))
-        .unwrap_or(false);
-
-    if !task_state_exists {
-        conn.execute_batch(
-            "ALTER TABLE notes ADD COLUMN task_state INTEGER NOT NULL DEFAULT 0;",
-        )?;
-    }
-
     let search_index_count = conn
         .prepare_cached("SELECT COUNT(*) FROM notes_search")?
         .query_row(params![], |row| row.get::<_, i64>(0))?;
@@ -117,7 +102,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             INSERT INTO notes_search (
                 note_id, subject_id, task_state, created_at)
             SELECT
-                note_id,
+                (SELECT rowid FROM notes WHERE id = note_id),
                 subject_id,
                 (SELECT task_state FROM notes WHERE id = note_id),
                 (SELECT created_at FROM notes WHERE id = note_id)
