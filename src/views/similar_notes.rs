@@ -17,7 +17,6 @@ pub fn FindSimilar(cx: Scope, text: String) -> Element {
 
     let elems = notes
         .iter()
-        .take(10)
         .map(|note| {
             rsx! {
                 ViewNote {

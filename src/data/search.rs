@@ -64,7 +64,7 @@ impl SearchWorker {
             };
 
             let result = match request.query {
-                Query::Search(text) => search_text(&conn, &text),
+                Query::Search(text) => search_text(&conn, &text, 50),
                 Query::Similar(text) => find_similar(&conn, &text),
             };
             let result = match result {
@@ -109,7 +109,7 @@ impl SearchWorker {
 /// In the 1 million note test case, i'm getting 2 second worst case
 /// search times. This is not acceptable, but it's good enough for now.
 #[tracing::instrument(skip(conn))]
-fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>> {
+fn search_text(conn: &Connection, text: &str, limit: usize) -> rusqlite::Result<Vec<NoteData>> {
     tracing::debug!("Begin");
 
     let query = format!(
@@ -118,8 +118,9 @@ fn search_text(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>>
         INNER JOIN notes n ON notes_fts.rowid = n.rowid
         WHERE notes_fts MATCH ?1
         ORDER BY rank
-        LIMIT 50",
+        LIMIT {limit}",
         columns = notes::NOTE_COLUMNS,
+        limit = limit
     );
     let mut stmt = conn.prepare_cached(&query)?;
     let mut rows = stmt.query(rusqlite::params![text])?;
@@ -150,5 +151,5 @@ fn find_similar(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>
 
     tracing::debug!("Searching for: {}", search);
 
-    search_text(conn, &search)
+    search_text(conn, &search, 20)
 }
