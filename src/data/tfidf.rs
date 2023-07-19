@@ -56,6 +56,17 @@ fn normalize_text(text: &str) -> String {
     text
 }
 
+fn normalize_word(word: &str) -> &str {
+    let word = trim_punctuation(word);
+    let word = naive_singularize(word);
+    let word = if word.ends_with("ing") && word.len() >= 6 {
+        &word[..word.len() - 3]
+    } else {
+        word
+    };
+    word
+}
+
 /// Counts the number of times each word occurs in the text.
 /// Returns a map from words to counts.
 /// Words are trimmed of punctuation before counting.
@@ -63,8 +74,7 @@ fn normalize_text(text: &str) -> String {
 fn count_word_occurrences(text: &str) -> BTreeMap<&str, usize> {
     let mut counts = BTreeMap::new();
     for word in text.split_whitespace() {
-        let word = trim_punctuation(word);
-        let word = naive_singularize(word);
+        let word = normalize_word(word);
         if word.len() < 3 {
             // We can't search for words shorter than 3 characters
             continue;

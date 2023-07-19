@@ -82,6 +82,8 @@ impl Drop for Store {
 
 #[allow(dead_code)]
 pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
+    use rand::Rng;
+    let mut rng = rand::thread_rng();
     let tx = conn.transaction()?;
     let subject_xount = 10;
     let subject_ids = (1..=subject_xount)
@@ -95,13 +97,15 @@ pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
     for i in 1..=count {
         let id = Uuid::new_v4();
         let task_state = i % 3;
+        let word_count = rng.gen_range(5..=100);
+        let text = lipsum::lipsum_words_with_rng(&mut rng, word_count);
         tx.prepare_cached(
             "INSERT INTO notes (id, text, task_state, created_at, modified_at)
             VALUES (?1, ?2, ?3, ?4, ?4)",
         )?
         .execute(params![
             id,
-            format!("Test Note {}", i),
+            text,
             task_state,
             chrono::Local::now().naive_utc().timestamp_nanos()
         ])?;
