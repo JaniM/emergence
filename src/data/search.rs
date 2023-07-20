@@ -64,7 +64,7 @@ impl SearchWorker {
             };
 
             let result = match request.query {
-                Query::Search(text) => search_text(&conn, &text, 50),
+                Query::Search(text) => search_text(&conn, vec![text], 50),
                 Query::Similar(text) => find_similar(&conn, &text),
             };
             let result = match result {
@@ -103,37 +103,96 @@ impl SearchWorker {
     }
 }
 
-/// Searches the database for text.
-///
-/// This implementation is very simple and inefficient.
-/// In the 1 million note test case, i'm getting 2 second worst case
-/// search times. This is not acceptable, but it's good enough for now.
 #[tracing::instrument(skip(conn))]
-fn search_text(conn: &Connection, text: &str, limit: usize) -> rusqlite::Result<Vec<NoteData>> {
+fn search_text(
+    conn: &Connection,
+    texts: Vec<String>,
+    limit: usize,
+) -> rusqlite::Result<Vec<NoteData>> {
+    use itertools::Itertools;
     tracing::debug!("Begin");
+
+    let sanitized_texts = texts
+        .iter()
+        .map(|text| {
+            text.to_lowercase()
+                .replace(|c: char| !c.is_alphabetic(), " ")
+        })
+        .collect::<Vec<_>>();
+
+    let groups = sanitized_texts
+        .iter()
+        .map(|sanitized_text| {
+            let trigrams = sanitized_text
+                .split_ascii_whitespace()
+                .flat_map(|w| {
+                    w.chars()
+                        .tuple_windows()
+                        .map(|(a, b, c)| format!("{}{}{}", a, b, c))
+                })
+                .unique()
+                .join(" AND ");
+            format!("({})", trigrams)
+        })
+        .join(" OR ");
 
     let query = format!(
         "SELECT {columns}
         FROM notes_fts
         INNER JOIN notes n ON notes_fts.rowid = n.rowid
-        WHERE notes_fts MATCH ?1
-        ORDER BY rank
-        LIMIT {limit}",
+        WHERE notes_fts MATCH ?1",
         columns = notes::NOTE_COLUMNS,
-        limit = limit
     );
     let mut stmt = conn.prepare_cached(&query)?;
-    let mut rows = stmt.query(rusqlite::params![text])?;
+    let mut rows = stmt.query(rusqlite::params![groups])?;
 
     let mut notes = Vec::new();
     while let Some(row) = rows.next()? {
         let note = notes::map_row_to_note(row)?;
         // SAFETY: We just created this note and the Rc is not shared
         // with anyone else. It is safe to unwrap.
-        notes.push(std::rc::Rc::into_inner(note).unwrap());
+        let note = std::rc::Rc::into_inner(note).unwrap();
+
+        // Note: There's no justification for this ranking algorithm.
+        // It's just something I came up with that seems to work.
+
+        let lower_note_text = note.text.to_lowercase();
+        let mut matched = false;
+        let mut rank = 0.0;
+        'outer: for (group_idx, group) in sanitized_texts.iter().rev().enumerate() {
+            let mut group_rank = 0.0;
+            let mut prev_idx = 0;
+            for word in group.split_whitespace() {
+                let idx = lower_note_text.find(word);
+                if let Some(idx) = idx {
+                    group_rank += 1.0 / ((idx as f32 - prev_idx as f32).abs() + 1.0);
+                    prev_idx = idx;
+                } else {
+                    continue 'outer;
+                }
+            }
+            rank += group_rank * (group_idx as f32 + 1.0);
+            matched = true;
+        }
+        if !matched {
+            continue;
+        }
+
+        notes.push((rank, note));
+
+        // Assume we have enough info for ranking after 100x the limit.
+        if notes.len() >= limit * 100 {
+            break;
+        }
     }
 
+    notes.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
     tracing::debug!("Found {} notes", notes.len());
+    let notes = notes
+        .into_iter()
+        .take(limit)
+        .map(|(_, note)| note)
+        .collect::<Vec<_>>();
     Ok(notes)
 }
 
@@ -147,9 +206,9 @@ fn find_similar(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>
         return Ok(Vec::new());
     }
 
-    let search = best_words[..end_idx].join(" OR ");
+    let search = best_words[..end_idx].to_vec();
 
-    tracing::debug!("Searching for: {}", search);
+    tracing::debug!("Searching for: {}", search.join(" OR "));
 
-    search_text(conn, &search, 20)
+    search_text(conn, search, 20)
 }

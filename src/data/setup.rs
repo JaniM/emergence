@@ -65,6 +65,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
         CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
             text,
             content='',
+            detail=none,
             tokenize="trigram"
         );
 

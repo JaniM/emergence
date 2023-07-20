@@ -28,6 +28,7 @@ markdown = "1.0.0-alpha"
 tokio = { version = "1.29.1", features = ["sync"] }
 lipsum = "0.9.0"
 rand = "0.8.5"
+itertools = "0.11.0"
 
 [dev-dependencies]
 criterion = "0.4"
