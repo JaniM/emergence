@@ -5,7 +5,7 @@ use std::rc::Rc;
 use tracing::{debug, instrument};
 use uuid::Uuid;
 
-use crate::data::tfidf;
+use crate::data::{search, tfidf};
 
 use super::{subjects::SubjectId, Store};
 
@@ -22,6 +22,7 @@ pub enum TaskState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NoteData {
+    pub rowid: u64,
     pub id: NoteId,
     pub text: String,
     pub subjects: Vec<SubjectId>,
@@ -137,6 +138,7 @@ impl Store {
         debug!("Adding note");
         let id = Uuid::new_v4();
         let created_at = Local::now();
+        let rowid;
         {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
@@ -154,6 +156,8 @@ impl Store {
                 created_at.naive_utc().timestamp_nanos()
             ])?;
 
+            rowid = tx.last_insert_rowid();
+
             for subject in &note.subjects {
                 tx.prepare_cached(
                     "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
@@ -168,14 +172,18 @@ impl Store {
 
         self.update_note_sources();
 
-        Ok(Rc::new(NoteData {
+        let note = Rc::new(NoteData {
+            rowid: rowid as u64,
             id: NoteId(id),
             text: note.text,
             subjects: note.subjects,
             task_state: TaskState::NotATask,
             created_at,
             modified_at: created_at,
-        }))
+        });
+        search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
+
+        Ok(note)
     }
 
     pub fn import_note(&self, note: &NoteData) -> rusqlite::Result<()> {
@@ -202,6 +210,8 @@ impl Store {
 
         tx.commit()?;
 
+        search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
+
         Ok(())
     }
 
@@ -222,6 +232,10 @@ impl Store {
             if &old_text != &note.text {
                 tfidf::remove_word_occurences(&tx, &old_text)?;
                 tfidf::insert_word_occurences(&tx, &note.text)?;
+
+                search::tantivy_remove_note(&mut self.index_writer.borrow_mut(), note.rowid)
+                    .unwrap();
+                search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
             }
 
             tx.prepare_cached(
@@ -266,14 +280,17 @@ impl Store {
             let mut conn = self.conn.borrow_mut();
             let tx = conn.transaction()?;
 
-            let old_text = tx
+            let (rowid, old_text) = tx
                 .prepare_cached(
-                    "SELECT text FROM notes
+                    "SELECT rowid, text FROM notes
                     WHERE id = ?1",
                 )?
-                .query_row(params![note.0], |row| row.get::<_, String>(0))?;
+                .query_row(params![note.0], |row| {
+                    Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
+                })?;
 
             tfidf::remove_word_occurences(&tx, &old_text)?;
+            search::tantivy_remove_note(&mut self.index_writer.borrow_mut(), rowid).unwrap();
 
             tx.prepare_cached(
                 "DELETE FROM notes_subjects
@@ -348,6 +365,7 @@ impl Store {
 const PAGE_SIZE: usize = 200;
 
 pub const NOTE_COLUMNS: &'static str = "
+    n.rowid,
     n.id,
     n.text,
     (SELECT concat_blobs(ns.subject_id) FROM notes_subjects ns WHERE ns.note_id = n.id)
@@ -446,18 +464,19 @@ fn tasks_query(subject: Option<SubjectId>) -> String {
 }
 
 pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
-    let subjects_blob = row.get_ref(2)?.as_blob_or_null()?.unwrap_or_default();
+    let subjects_blob = row.get_ref(3)?.as_blob_or_null()?.unwrap_or_default();
     let subjects = subjects_blob
         .chunks_exact(16)
         .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
         .collect();
 
     Ok(Rc::new(NoteData {
-        id: NoteId(row.get(0)?),
-        text: row.get(1)?,
+        rowid: row.get(0)?,
+        id: NoteId(row.get(1)?),
+        text: row.get(2)?,
         subjects,
-        task_state: TaskState::from_db_value(row.get(3)?),
-        created_at: Local.timestamp_nanos(row.get(4)?),
-        modified_at: Local.timestamp_nanos(row.get(5)?),
+        task_state: TaskState::from_db_value(row.get(4)?),
+        created_at: Local.timestamp_nanos(row.get(5)?),
+        modified_at: Local.timestamp_nanos(row.get(6)?),
     }))
 }

@@ -62,30 +62,6 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             AND subject_id = OLD.subject_id;
         END;
 
-        CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(
-            text,
-            content='',
-            detail=none,
-            tokenize="trigram"
-        );
-
-        CREATE TRIGGER IF NOT EXISTS notes_fts_insert AFTER INSERT ON notes BEGIN
-            INSERT INTO notes_fts (rowid, text)
-            VALUES (NEW.rowid, NEW.text);
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS notes_fts_update AFTER UPDATE ON notes BEGIN
-            INSERT INTO notes_fts (notes_fts, rowid, text)
-            VALUES('delete', OLD.rowid, OLD.text);
-            INSERT INTO notes_fts (rowid, text)
-            VALUES (NEW.rowid, NEW.text);
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS notes_fts_delete AFTER DELETE ON notes BEGIN
-            INSERT INTO notes_fts (notes_fts, rowid)
-            VALUES('delete', OLD.rowid);
-        END;
-
         CREATE TABLE IF NOT EXISTS term_occurrences (
             term TEXT PRIMARY KEY,
             count INTEGER NOT NULL
@@ -108,19 +84,6 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
                 (SELECT task_state FROM notes WHERE id = note_id),
                 (SELECT created_at FROM notes WHERE id = note_id)
             FROM notes_subjects;
-        "#,
-        )?;
-    }
-
-    let notes_fts_count = conn
-        .prepare_cached("SELECT COUNT(*) FROM notes_fts_idx")?
-        .query_row(params![], |row| row.get::<_, i64>(0))?;
-
-    if notes_fts_count == 0 {
-        conn.execute_batch(
-            r#"
-            INSERT INTO notes_fts (rowid, text)
-            SELECT rowid, text FROM notes;
         "#,
         )?;
     }

@@ -3,15 +3,15 @@ pub mod export;
 mod functions;
 pub mod notes;
 pub mod query;
-mod search;
+pub mod search;
 mod setup;
 pub mod subjects;
 pub mod tfidf;
 
 use rusqlite::{params, Connection, Result};
-use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
+use std::{cell::RefCell, sync::Arc};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
@@ -26,6 +26,9 @@ pub struct Store {
     update_targets: Rc<RefCell<Vec<Rc<RefCell<StoreEventSource>>>>>,
     note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
     subject_source: Rc<RefCell<SubjectQuerySource>>,
+
+    index: Arc<tantivy::Index>,
+    index_writer: RefCell<tantivy::IndexWriter>,
 }
 
 #[derive(Debug, Clone)]
@@ -37,8 +40,17 @@ pub enum ConnectionType {
 
 impl Store {
     #[instrument()]
-    pub fn new(file: ConnectionType) -> Self {
+    pub fn new(dir: ConnectionType) -> Self {
         debug!("Begin");
+        let file = match dir.clone() {
+            ConnectionType::InMemory => ConnectionType::InMemory,
+            ConnectionType::File(path) => {
+                let db_file = path.join("data.db");
+                let _ = std::fs::create_dir_all(path);
+                ConnectionType::File(db_file)
+            }
+        };
+
         let mut conn = match &file {
             ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
             ConnectionType::File(path) => Connection::open(path).unwrap(),
@@ -47,15 +59,22 @@ impl Store {
         functions::add_functions(&conn).unwrap();
         setup::setup_tables(&mut conn).unwrap();
 
+        let index = search::construct_tantivy_index(dir);
+        let index = Arc::new(index);
+        let index_writer = index.writer(5_000_000).unwrap();
+        let index_writer = RefCell::new(index_writer);
+
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
-            search: search::SearchWorker::start_search_thread(file),
+            search: search::SearchWorker::start_search_thread(file, index.clone()),
             note_sources: Rc::new(RefCell::new(Vec::new())),
             subject_source: Rc::new(RefCell::new(SubjectQuerySource {
                 subjects: Default::default(),
                 update_callback: Vec::new(),
             })),
             update_targets: Default::default(),
+            index,
+            index_writer,
         };
 
         // shove_test_data(&mut store.conn.borrow_mut()).unwrap();

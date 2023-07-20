@@ -12,8 +12,8 @@ clap = { version = "4.3.11", features = ["derive"] }
 const_format = "0.2.31"
 
 # using master branch for global hotkeys
-dioxus = { git = "https://github.com/DioxusLabs/dioxus" }
-dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus" }
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "a96ccdc6f3ef536b1978d49df53660fa5089fe23" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus", rev = "a96ccdc6f3ef536b1978d49df53660fa5089fe23" }
 
 rusqlite = { version = "0.29.0", features = ["bundled", "chrono", "functions", "uuid"] }
 smallvec = "1.11.0"
@@ -29,6 +29,7 @@ tokio = { version = "1.29.1", features = ["sync"] }
 lipsum = "0.9.0"
 rand = "0.8.5"
 itertools = "0.11.0"
+tantivy = "0.20.2"
 
 [dev-dependencies]
 criterion = "0.4"

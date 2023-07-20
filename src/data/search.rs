@@ -1,5 +1,8 @@
 use rusqlite::Connection;
+use std::sync::Arc;
 use std::thread;
+use tantivy::query::QueryParserError;
+use tantivy::tokenizer::TextAnalyzer;
 use tokio::sync::mpsc::{error::TryRecvError, unbounded_channel, UnboundedSender};
 use tokio::sync::oneshot;
 
@@ -28,7 +31,7 @@ pub struct SearchWorker {
 }
 
 impl SearchWorker {
-    pub fn start_search_thread(file: ConnectionType) -> SearchWorker {
+    pub fn start_search_thread(file: ConnectionType, index: Arc<Index>) -> SearchWorker {
         let conn = match file {
             ConnectionType::InMemory => Connection::open_in_memory().unwrap(),
             ConnectionType::File(path) => Connection::open(path).unwrap(),
@@ -36,6 +39,8 @@ impl SearchWorker {
         add_functions(&conn).unwrap();
 
         let (sender_to_worker, mut receiver_to_worker) = unbounded_channel::<SearchRequest>();
+
+        let reader = index.reader().unwrap();
 
         // Note: the handler is not allowed to crash, so unwrap is strictly forbidden.
         let _handle = thread::spawn(move || loop {
@@ -64,8 +69,8 @@ impl SearchWorker {
             };
 
             let result = match request.query {
-                Query::Search(text) => search_text(&conn, vec![text], 50),
-                Query::Similar(text) => find_similar(&conn, &text),
+                Query::Search(text) => search_text(&index, &reader, &conn, vec![text], 50),
+                Query::Similar(text) => find_similar(&index, &reader, &conn, &text),
             };
             let result = match result {
                 Ok(result) => result,
@@ -103,8 +108,10 @@ impl SearchWorker {
     }
 }
 
-#[tracing::instrument(skip(conn))]
+#[tracing::instrument(skip(index, reader, conn))]
 fn search_text(
+    index: &Index,
+    reader: &IndexReader,
     conn: &Connection,
     texts: Vec<String>,
     limit: usize,
@@ -122,82 +129,22 @@ fn search_text(
 
     let groups = sanitized_texts
         .iter()
-        .map(|sanitized_text| {
-            let trigrams = sanitized_text
-                .split_ascii_whitespace()
-                .flat_map(|w| {
-                    w.chars()
-                        .tuple_windows()
-                        .map(|(a, b, c)| format!("{}{}{}", a, b, c))
-                })
-                .unique()
-                .join(" AND ");
-            format!("({})", trigrams)
-        })
+        .map(|sanitized_text| format!("({})", sanitized_text))
         .join(" OR ");
 
-    let query = format!(
-        "SELECT {columns}
-        FROM notes_fts
-        INNER JOIN notes n ON notes_fts.rowid = n.rowid
-        WHERE notes_fts MATCH ?1",
-        columns = notes::NOTE_COLUMNS,
-    );
-    let mut stmt = conn.prepare_cached(&query)?;
-    let mut rows = stmt.query(rusqlite::params![groups])?;
+    let notes = tantivy_find_notes(index, reader, conn, &groups, limit).unwrap();
 
-    let mut notes = Vec::new();
-    while let Some(row) = rows.next()? {
-        let note = notes::map_row_to_note(row)?;
-        // SAFETY: We just created this note and the Rc is not shared
-        // with anyone else. It is safe to unwrap.
-        let note = std::rc::Rc::into_inner(note).unwrap();
-
-        // Note: There's no justification for this ranking algorithm.
-        // It's just something I came up with that seems to work.
-
-        let lower_note_text = note.text.to_lowercase();
-        let mut matched = false;
-        let mut rank = 0.0;
-        'outer: for (group_idx, group) in sanitized_texts.iter().rev().enumerate() {
-            let mut group_rank = 0.0;
-            let mut prev_idx = 0;
-            for word in group.split_whitespace() {
-                let idx = lower_note_text.find(word);
-                if let Some(idx) = idx {
-                    group_rank += 1.0 / ((idx as f32 - prev_idx as f32).abs() + 1.0);
-                    prev_idx = idx;
-                } else {
-                    continue 'outer;
-                }
-            }
-            rank += group_rank * (group_idx as f32 + 1.0);
-            matched = true;
-        }
-        if !matched {
-            continue;
-        }
-
-        notes.push((rank, note));
-
-        // Assume we have enough info for ranking after 100x the limit.
-        if notes.len() >= limit * 100 {
-            break;
-        }
-    }
-
-    notes.sort_unstable_by(|a, b| b.0.partial_cmp(&a.0).unwrap());
     tracing::debug!("Found {} notes", notes.len());
-    let notes = notes
-        .into_iter()
-        .take(limit)
-        .map(|(_, note)| note)
-        .collect::<Vec<_>>();
     Ok(notes)
 }
 
 /// Find similar notes based on the TF-IDF algorithm.
-fn find_similar(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>> {
+fn find_similar(
+    index: &Index,
+    reader: &IndexReader,
+    conn: &Connection,
+    text: &str,
+) -> rusqlite::Result<Vec<NoteData>> {
     let good_word_xount = 5;
     let best_words = tfidf::best_words(conn, text)?;
 
@@ -210,5 +157,169 @@ fn find_similar(conn: &Connection, text: &str) -> rusqlite::Result<Vec<NoteData>
 
     tracing::debug!("Searching for: {}", search.join(" OR "));
 
-    search_text(conn, search, 20)
+    search_text(index, reader, conn, search, 20)
+}
+
+use tantivy::{schema::*, Index, IndexReader, TantivyError};
+
+fn schema() -> Schema {
+    let mut schema_builder = Schema::builder();
+    schema_builder.add_text_field(
+        "text",
+        TextOptions::default().set_indexing_options(
+            TextFieldIndexing::default()
+                .set_tokenizer("ngram3")
+                .set_index_option(IndexRecordOption::WithFreqsAndPositions),
+        ),
+    );
+    schema_builder.add_u64_field("id", INDEXED | STORED | FAST);
+    let schema = schema_builder.build();
+    schema
+}
+
+pub fn construct_tantivy_index(path: ConnectionType) -> Index {
+    let schema = schema();
+    let index = match path {
+        ConnectionType::InMemory => Index::create_in_ram(schema.clone()),
+        ConnectionType::File(path) => {
+            let path = path.join("tantivy");
+            std::fs::create_dir_all(&path).unwrap();
+            let index = Index::create_in_dir(&path, schema.clone());
+            match index {
+                Ok(index) => index,
+                Err(TantivyError::IndexAlreadyExists) => {
+                    tracing::info!("Index already exists, opening it");
+                    Index::open_in_dir(&path).unwrap()
+                }
+                Err(e) => panic!("Failed to create index: {}", e),
+            }
+        }
+    };
+    index.tokenizers().register(
+        "ngram3",
+        TextAnalyzer::builder(tantivy::tokenizer::NgramTokenizer::new(3, 3, false))
+            .filter(tantivy::tokenizer::LowerCaser)
+            .build(),
+    );
+    index
+}
+
+use tantivy::doc;
+
+pub fn fill_tantivy_index(writer: &mut tantivy::IndexWriter, conn: &Connection) {
+    writer.delete_all_documents().unwrap();
+    writer.commit().unwrap();
+
+    let mut stmt = conn
+        .prepare_cached("SELECT rowid, text FROM notes")
+        .unwrap();
+    let mut rows = stmt.query([]).unwrap();
+
+    let schema = schema();
+    let id_schema = schema.get_field("id").unwrap();
+    let text_schema = schema.get_field("text").unwrap();
+
+    while let Some(row) = rows.next().unwrap() {
+        let id: u64 = row.get(0).unwrap();
+        let text: String = row.get(1).unwrap();
+        let doc = doc!(
+            id_schema => id,
+            text_schema => text,
+        );
+        writer.add_document(doc).unwrap();
+    }
+
+    writer.commit().unwrap();
+}
+
+pub fn tantivy_add_note(writer: &mut tantivy::IndexWriter, note: &NoteData) -> tantivy::Result<()> {
+    let schema = schema();
+    let id_schema = schema.get_field("id").unwrap();
+    let text_schema = schema.get_field("text").unwrap();
+
+    let text = note.text.clone();
+    let id = note.rowid;
+
+    let doc = doc!(
+        id_schema => id,
+        text_schema => text,
+    );
+    writer.add_document(doc).unwrap();
+    writer.commit().unwrap();
+
+    Ok(())
+}
+
+pub fn tantivy_remove_note(writer: &mut tantivy::IndexWriter, rowid: u64) -> tantivy::Result<()> {
+    let schema = schema();
+    let id_schema = schema.get_field("id").unwrap();
+
+    writer.delete_term(Term::from_field_u64(id_schema, rowid));
+    writer.commit().unwrap();
+
+    Ok(())
+}
+
+#[tracing::instrument(skip(index, reader, conn))]
+fn tantivy_find_notes(
+    index: &tantivy::Index,
+    reader: &tantivy::IndexReader,
+    conn: &Connection,
+    text: &str,
+    limit: usize,
+) -> tantivy::Result<Vec<NoteData>> {
+    let schema = schema();
+    let id_schema = schema.get_field("id").unwrap();
+    let text_schema = schema.get_field("text").unwrap();
+
+    let searcher = reader.searcher();
+    let query_parser = tantivy::query::QueryParser::for_index(&index, vec![text_schema]);
+    let query = query_parser.parse_query(text);
+
+    let query = match query {
+        Ok(query) => query,
+        Err(QueryParserError::UnknownTokenizer { .. }) => {
+            tracing::debug!("Unknown to tokenizer");
+            return Ok(Vec::new());
+        }
+        Err(e) => {
+            tracing::error!("Failed to parse query: {}", e);
+            return Ok(Vec::new());
+        }
+    };
+
+    let top_docs = searcher.search(&query, &tantivy::collector::TopDocs::with_limit(limit))?;
+
+    let db_queey = format!(
+        "SELECT {} FROM notes n WHERE rowid = ?",
+        notes::NOTE_COLUMNS
+    );
+    let mut stmt = conn.prepare_cached(&db_queey).unwrap();
+
+    tracing::trace!("Found {} results", top_docs.len());
+
+    let mut notes = Vec::new();
+    for (_score, doc_address) in top_docs {
+        let retrieved_doc = searcher.doc(doc_address)?;
+        let rowid = retrieved_doc
+            .get_first(id_schema)
+            .unwrap()
+            .as_u64()
+            .unwrap();
+        let note = stmt.query_row([rowid], notes::map_row_to_note);
+        let note = match note {
+            Ok(note) => note,
+            Err(_) => {
+                continue;
+            }
+        };
+
+        // SAFETY: We just created this note and the Rc is not shared
+        // with anyone else. It is safe to unwrap.
+        let note = std::rc::Rc::into_inner(note).unwrap();
+        tracing::trace!("Found note: {:?}", note);
+        notes.push(note);
+    }
+
+    Ok(notes)
 }

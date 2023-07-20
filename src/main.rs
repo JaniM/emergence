@@ -24,9 +24,12 @@ struct Args {
     #[arg(value_enum, short, long, default_value_t = LogLevel::Info)]
     verbosity: LogLevel,
 
-    /// The database file to use
-    #[arg(short, long, value_name = "FILE")]
-    db_file: Option<PathBuf>,
+    /// The data folder to use.
+    #[arg(short, long, value_name = "FOLDER")]
+    data: Option<PathBuf>,
+
+    #[arg(long)]
+    reindex: bool,
 
     /// Construct a sample database.
     ///
@@ -70,7 +73,7 @@ impl LogLevel {
 
 fn main() {
     let args = Args::parse();
-    let db_file = args.db_file.unwrap_or_else(|| PathBuf::from("data.db"));
+    let data_path = args.data.unwrap_or_else(|| PathBuf::from("data"));
 
     tracing::subscriber::set_global_default(
         tracing_subscriber::FmtSubscriber::builder()
@@ -81,7 +84,23 @@ fn main() {
 
     if args.explain {
         info!("Explaining query plans");
-        data::explain::explain_all(data::ConnectionType::File(db_file)).unwrap();
+        data::explain::explain_all(data::ConnectionType::File(data_path)).unwrap();
+        return;
+    }
+
+    if args.reindex {
+        info!("Reindexing search engine");
+        let tantivy_dir = data_path.join("tantivy");
+        let data_path = data::ConnectionType::File(data_path);
+        let store = Store::new(data_path.clone());
+        let conn = store.conn.borrow();
+
+        let _ = std::fs::remove_dir_all(tantivy_dir.clone());
+        let index = data::search::construct_tantivy_index(data_path);
+        let mut writer = index.writer(50_000_000).unwrap();
+        data::search::fill_tantivy_index(&mut writer, &conn);
+
+        info!("Finished reindexing");
         return;
     }
 
@@ -90,7 +109,7 @@ fn main() {
             "Exporting to {}, this may take a long time",
             export_file.display()
         );
-        data::export::export(db_file, export_file);
+        data::export::export(data_path, export_file);
         info!("Finished exporting");
         return;
     }
@@ -100,20 +119,22 @@ fn main() {
             "Importing from {}, this may take a long time",
             import_file.display()
         );
-        data::export::import(db_file, import_file);
+        data::export::import(data_path, import_file);
         info!("Finished importing");
         return;
     }
 
     if let Some(row_count) = args.sample {
+        let db_file = data_path.join("data.db");
         if !db_file.exists() {
             info!("Creating sample database, this may take a moment");
-            let store = Store::new(data::ConnectionType::File(db_file.clone()));
+            let store = Store::new(data::ConnectionType::File(data_path));
             data::shove_test_data(&mut store.conn.borrow_mut(), row_count).unwrap();
             info!("Finished creating sample database");
         } else {
             info!("Database file already exists, skipping sample database creation");
         }
+        return;
     }
 
     info!("Starting app");
@@ -126,7 +147,7 @@ fn main() {
     // launch the dioxus app in a webview
     dioxus_desktop::launch_with_props(
         App,
-        AppProps { db_file },
+        AppProps { db_file: data_path },
         dioxus_desktop::Config::new()
             .with_disable_context_menu(disable_context_menu)
             .with_window(
