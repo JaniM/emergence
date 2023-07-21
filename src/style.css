@@ -283,6 +283,7 @@ div, textarea, input, button {
 }
 
 .select-subject-wrapper {
+    position: relative;
     display: flex;
     flex-flow: row;
     justify-content: flex-end;

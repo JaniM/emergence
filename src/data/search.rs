@@ -69,7 +69,7 @@ impl SearchWorker {
             };
 
             let result = match request.query {
-                Query::Search(text) => search_text(&index, &reader, &conn, vec![text], 50),
+                Query::Search(text) => search_text(&index, &reader, &conn, vec![text], 200),
                 Query::Similar(text) => find_similar(&index, &reader, &conn, &text),
             };
             let result = match result {

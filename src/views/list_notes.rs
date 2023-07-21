@@ -136,9 +136,10 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
     } else if let Some(last_group) = groups.last_mut() {
         if let Some(last_note) = last_group.2.pop() {
             let id = last_note.0.0;
+            let key = format!("scroll-to-{subject_id_key}-{id}");
             let new_last = rsx! {
                 ScrollTo {
-                    key: "scroll-to-{subject_id_key}-{id}",
+                    key: "{key}",
                     last_note.1
                 }
             };
@@ -152,7 +153,10 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
                 key: "input",
                 subject: my_subject.read().0,
                 task: *tasks_only,
-                on_create_note: |_| show_input.write().0 = false,
+                on_create_note: |_| {
+                    show_input.write().0 = false;
+                    scroll_to_note.write().0 = None;
+                },
                 on_cancel: |_| show_input.write().0 = false
             }
         }

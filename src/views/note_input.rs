@@ -94,6 +94,23 @@ struct NoteInputProps<'a> {
     initial_subjects: Vec<SubjectId>,
 }
 
+const TEXTAREA_HACK: &'static str = r#"
+const tx = document.getElementsByClassName("note-textarea");
+for (let i = 0; i < tx.length; i++) {
+    const parent = tx[i].parentElement;
+    const parentStyle = window.getComputedStyle(parent, null);
+    const parentPadding =
+        parseInt(parentStyle.getPropertyValue('padding-bottom'))
+        + parseInt(parentStyle.getPropertyValue('padding-top'));
+    tx[i].parentElement.setAttribute("style",
+        "height:" + (tx[i].scrollHeight + parentPadding) + "px;");
+    tx[i].setAttribute("style", "height:0;");
+    tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
+    tx[i].parentElement.setAttribute("style", "height: fit-content;");
+    tx[i].scrollIntoView({ block: "nearest" });
+}
+"#;
+
 fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     #[derive(PartialEq, Eq, Clone, Copy)]
     enum ShowSubjects {
@@ -106,22 +123,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     // Adapted from https://stackoverflow.com/a/25621277
     let js_eval = use_eval(cx);
     let size_textareas = move || {
-        js_eval(
-            r#"const tx = document.getElementsByTagName("textarea");
-            for (let i = 0; i < tx.length; i++) {
-                const parent = tx[i].parentElement;
-                const parentStyle = window.getComputedStyle(parent, null);
-                const parentPadding =
-                    parseInt(parentStyle.getPropertyValue('padding-bottom'))
-                    + parseInt(parentStyle.getPropertyValue('padding-top'));
-                tx[i].parentElement.setAttribute("style",
-                    "height:" + (tx[i].scrollHeight + parentPadding) + "px;");
-                tx[i].setAttribute("style", "height:0;");
-                tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
-                tx[i].parentElement.setAttribute("style", "height: fit-content;");
-            }"#
-            .to_string(),
-        )
+        js_eval(TEXTAREA_HACK.to_string());
     };
 
     // TODO: Combine these states.
@@ -180,6 +182,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
             div {
                 class: "note-content note",
                 textarea {
+                    class: "note-textarea",
                     value: "{text}",
                     rows: 2,
                     onmounted: move |e| {

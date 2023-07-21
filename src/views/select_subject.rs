@@ -55,7 +55,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
     };
 
     let above_style = if cx.props.show_above {
-        "bottom: 100%;"
+        "bottom: 0; top: auto;"
     } else {
         ""
     };
