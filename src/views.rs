@@ -7,4 +7,4 @@ pub mod scroll_to;
 pub mod search_view;
 pub mod select_subject;
 pub mod view_note;
-pub mod similar_notes;
+pub mod side_panel;

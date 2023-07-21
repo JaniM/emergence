@@ -14,7 +14,7 @@ use dioxus::{
 };
 use tracing::{info, metadata::LevelFilter};
 
-use crate::views::journal::Journal;
+use crate::views::{journal::Journal, side_panel::{SidePanelState, SidePanel}};
 
 use clap::{Parser, ValueEnum};
 
@@ -173,6 +173,8 @@ fn App(cx: Scope<AppProps>) -> Element {
         Store::new(data::ConnectionType::File(cx.props.db_file.clone()))
     });
     use_shared_state_provider(cx, || ShowInput(false));
+    use_shared_state_provider(cx, || SidePanelState::default());
+
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
     let window = use_window(cx);
     let zoom_level = use_state(cx, || 100);
@@ -216,14 +218,15 @@ fn App(cx: Scope<AppProps>) -> Element {
     };
 
     render! {
+        style { include_str!("style.css") },
+        div {
+            class: "magic-capture",
+            onkeydown: onkeydown,
+        }
         div {
             class: "app",
-            style { include_str!("style.css") },
-            div {
-                class: "magic-capture",
-                onkeydown: onkeydown,
-            }
             Journal { },
+            SidePanel { },
         }
     }
 }

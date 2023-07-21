@@ -27,7 +27,6 @@ pub struct Store {
     note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
     subject_source: Rc<RefCell<SubjectQuerySource>>,
 
-    index: Arc<tantivy::Index>,
     index_writer: RefCell<tantivy::IndexWriter>,
 }
 
@@ -73,7 +72,6 @@ impl Store {
                 update_callback: Vec::new(),
             })),
             update_targets: Default::default(),
-            index,
             index_writer,
         };
 

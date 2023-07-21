@@ -2,7 +2,7 @@ use crate::{
     data::{query::use_note_query, subjects::Subject},
     views::{
         journal::SelectedSubject, note_input::CreateNote, scroll_to::ScrollTo,
-        search_view::SearchOpen, view_note::ViewNote,
+        search_view::SearchOpen, side_panel::SidePanelState, view_note::ViewNote,
     },
     ShowInput,
 };
@@ -49,6 +49,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
     let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
+    let side_panel = use_shared_state::<SidePanelState>(cx).unwrap();
 
     let subject_id = my_subject.read().0;
     let subject_id_key = subject_id.map_or_else(|| "none".to_string(), |id| id.0.to_string());
@@ -108,6 +109,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
                                 on_select_subject: move |subject: Subject| {
                                     my_subject.write().0 = Some(subject.id);
                                     scroll_to_note.write().0 = Some(id);
+                                    *side_panel.write() = SidePanelState::SubjectDetails(subject.id);
                                 },
                             } },
                         )
@@ -135,7 +137,7 @@ pub fn ListNotes(cx: Scope, tasks_only: bool) -> Element {
         }
     } else if let Some(last_group) = groups.last_mut() {
         if let Some(last_note) = last_group.2.pop() {
-            let id = last_note.0.0;
+            let id = last_note.0 .0;
             let key = format!("scroll-to-{subject_id_key}-{id}");
             let new_last = rsx! {
                 ScrollTo {

@@ -9,7 +9,7 @@ use crate::{
     views::{
         list_notes::{ListNotes, ScrollToNote},
         search_view::{Search, SearchOpen, SearchText},
-        select_subject::SelectSubject,
+        select_subject::SelectSubject, side_panel::SidePanelState,
     },
 };
 
@@ -32,6 +32,7 @@ pub fn Journal(cx: Scope) -> Element {
     let subjects = use_subject_query(cx).subjects();
     let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
     let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
+    let side_panel = use_shared_state::<SidePanelState>(cx).unwrap();
 
     let subject_name = my_subject
         .read()
@@ -57,9 +58,13 @@ pub fn Journal(cx: Scope) -> Element {
     };
 
     let jump_to_subject = move |subject: Option<Subject>| {
-        my_subject.write().0 = subject.map(|s| s.id);
+        my_subject.write().0 = subject.as_ref().map(|s| s.id);
         scroll_to_note.write().0 = None;
         show_subject_select.set(false);
+        *side_panel.write() = match subject {
+            Some(subject) => SidePanelState::SubjectDetails(subject.id),
+            None => SidePanelState::Nothing,
+        };
     };
 
     render! {

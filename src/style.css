@@ -42,11 +42,24 @@ div, textarea, input, button {
     height: 100vh;
     overflow: hidden;
     background-color: #fbfbfb;
+    display: grid;
+    grid-template-columns:
+        fit-content(800px) minmax(250px, 1fr);
+    grid-template-rows: 100%;
 }
 
+@media screen and (max-width: 1050px) {
+    .app {
+        grid-template-columns: 1fr;
+    }
+
+    .side-panel {
+        display: none;
+    }
+}
+    
 .journal {
     display: grid;
-    height: 100%;
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
 
@@ -154,6 +167,7 @@ div, textarea, input, button {
 }
 
 .note-row {
+    height: fit-content;
     position: relative;
     display: flex;
     flex-flow: row;
@@ -479,13 +493,9 @@ div, textarea, input, button {
     }
 }
 
-.right-side-popup {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 350px;
-    height: 100%;
+.side-panel {
     padding: 10px;
+    padding-right: 0;
     background-color: #ddd;
     border-left: 1px solid #ccc;
     overflow: hidden;
@@ -493,12 +503,20 @@ div, textarea, input, button {
     flex-direction: column;
     justify-content: flex-start;
     align-items: stretch;
-    z-index: 1;
     gap: 10px;
 }
 
-.right-side-popup .right-side-popup-header {
+.side-panel .side-panel-header {
     font-size: 1.2em;
     font-weight: bold;
     text-align: center;
+}
+
+.similar-notes {
+    overflow-y: scroll;
+    max-height: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-gap: 10px;
+    padding-top: 10px;
 }
