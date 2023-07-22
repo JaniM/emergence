@@ -259,9 +259,9 @@ fn FindSimilar(cx: Scope, text: String) -> Element {
 
     let style = css!(
         "
-        display: grid;
+        display: flex;
+        flex-direction: column;
         gap: 10px;
-        grid-template-rows: auto 1fr;
         overflow: hidden;
 
         .similar-notes {
