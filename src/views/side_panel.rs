@@ -7,7 +7,7 @@ use sir::css;
 
 use crate::views::{select_subject::SelectSubject, view_note::ViewNote};
 
-use super::journal::SelectedSubject;
+use super::ViewState;
 
 #[derive(Default, Clone)]
 pub enum SidePanelState {
@@ -45,10 +45,10 @@ impl SidePanelState {
 }
 
 pub fn SidePanel(cx: Scope) -> Element {
-    let state = use_shared_state::<SidePanelState>(cx).unwrap();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
-    let state = state.read();
-    let content = match &*state {
+    let view_state = view_state.read();
+    let content = match &view_state.side_panel {
         SidePanelState::Nothing => rsx! {
             div {
             }
@@ -65,7 +65,8 @@ pub fn SidePanel(cx: Scope) -> Element {
         },
     };
 
-    let style = css!("
+    let style = css!(
+        "
         padding: 10px;
         padding-right: 0;
         background-color: #ddd;
@@ -80,7 +81,8 @@ pub fn SidePanel(cx: Scope) -> Element {
             margin-bottom: 10px;
             text-align: center;
         }
-    ");
+    "
+    );
 
     cx.render(rsx! {
         div {
@@ -92,8 +94,8 @@ pub fn SidePanel(cx: Scope) -> Element {
 
 #[inline_props]
 fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
-    let selected_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
-    let side_panel = use_shared_state::<SidePanelState>(cx).unwrap();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+
     let subjects = use_subject_query(cx).subjects();
     let my_subject = subjects.get(&subject_id).unwrap().clone();
 
@@ -109,8 +111,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
                     key: "{subject.id.0}",
                     class: "subject-card",
                     onclick: move |_| {
-                        selected_subject.write().0 = Some(subject.id);
-                        *side_panel.write() = SidePanelState::SubjectDetails(subject.id);
+                        view_state.write().go_to_subject(subject.id);
                     },
                     "{subject.name}"
                 }
@@ -173,8 +174,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
                     key: "{parent.id.0}",
                     class: "subject-card",
                     onclick: move |_| {
-                        selected_subject.write().0 = Some(parent.id);
-                        *side_panel.write() = SidePanelState::SubjectDetails(parent.id);
+                        view_state.write().go_to_subject(parent.id);
                     },
                     div {
                         "{parent.name}"
@@ -276,7 +276,8 @@ fn FindSimilar(cx: Scope, text: String) -> Element {
                 overflow: hidden;
             }
         }
-    ");
+    "
+    );
 
     let elems = notes
         .iter()

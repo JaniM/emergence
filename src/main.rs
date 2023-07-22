@@ -15,7 +15,7 @@ use dioxus::{
 use sir::AppStyle;
 use tracing::{info, metadata::LevelFilter};
 
-use crate::views::{journal::{Journal, SelectedSubject}, side_panel::{SidePanelState, SidePanel}};
+use crate::views::{journal::Journal, side_panel::SidePanel, ViewState};
 
 use clap::{Parser, ValueEnum};
 
@@ -162,8 +162,6 @@ fn main() {
     );
 }
 
-pub struct ShowInput(pub bool);
-
 struct AppProps {
     db_file: PathBuf,
 }
@@ -173,11 +171,9 @@ fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
     use_shared_state_provider(cx, || {
         Store::new(data::ConnectionType::File(cx.props.db_file.clone()))
     });
-    use_shared_state_provider(cx, || ShowInput(false));
-    use_shared_state_provider(cx, || SidePanelState::default());
-    use_shared_state_provider(cx, || SelectedSubject(None));
+    use_shared_state_provider(cx, || ViewState::default());
 
-    let show_input = use_shared_state::<ShowInput>(cx).unwrap();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
     let window = use_window(cx);
     let zoom_level = use_state(cx, || 100);
 
@@ -199,7 +195,9 @@ fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
 
     let onkeydown = move |e: KeyboardEvent| match e.key() {
         Key::Character(c) if e.modifiers().contains(Modifiers::CONTROL) => match c.as_str() {
-            "n" => show_input.write().0 = true,
+            "n" => {
+                view_state.write().start_note_input();
+            }
             "+" => {
                 let new_zoom = *zoom_level.get() + 10;
                 zoom_level.set(new_zoom);

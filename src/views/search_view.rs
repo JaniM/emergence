@@ -2,12 +2,11 @@ use dioxus::prelude::*;
 
 use crate::views::list_notes::ListSearchResult;
 
-pub struct SearchText(pub String);
-pub struct SearchOpen(pub bool);
+use super::ViewState;
 
 pub fn Search(cx: Scope) -> Element {
-    let search_text = use_shared_state::<SearchText>(cx).unwrap();
-    let text = search_text.read().0.clone();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let text = view_state.read().search_text.clone();
 
     let has_too_short_word = text.split_whitespace().any(|word| word.len() < 3);
 
@@ -31,7 +30,7 @@ pub fn Search(cx: Scope) -> Element {
                         e.inner().set_focus(true);
                     },
                     oninput: |e| {
-                        search_text.write().0 = e.value.clone();
+                        view_state.write().set_search_text(e.value.clone());
                     },
                 },
             }

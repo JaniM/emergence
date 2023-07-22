@@ -5,7 +5,7 @@ use crate::{
         query::use_store,
         subjects::{Subject, SubjectId},
     },
-    views::{select_subject::SelectSubject, side_panel::SidePanelState, view_note::SubjectCards},
+    views::{select_subject::SelectSubject, view_note::SubjectCards, ViewState},
 };
 use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
@@ -132,10 +132,10 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 
-    let side_panel = use_shared_state::<SidePanelState>(cx).unwrap();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let cleanup = || {
-        side_panel.write().back();
+        view_state.write().side_panel.back();
     };
 
     let submit = move || {
@@ -194,7 +194,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                     value: "{text}",
                     rows: 2,
                     onmounted: move |e| {
-                        side_panel.write().list_similar(text.get().clone());
+                        view_state.write().side_panel.list_similar(text.get().clone());
                         textarea.set(Some(e.inner().clone()));
                         e.inner().set_focus(true);
                         size_textareas();
@@ -202,7 +202,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                     oninput: move |e| {
                         text.set(e.value.clone());
                         size_textareas();
-                        side_panel.write().list_similar(e.value.clone())
+                        view_state.write().side_panel.list_similar(e.value.clone())
                     },
                     onkeypress: onkeypress,
                 }

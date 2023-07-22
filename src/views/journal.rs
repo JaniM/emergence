@@ -2,68 +2,49 @@ use dioxus::prelude::*;
 use emergence::data::query::use_store;
 
 use crate::{
-    data::{
-        query::use_subject_query,
-        subjects::{Subject, SubjectId},
-    },
-    views::{
-        list_notes::{ListNotes, ScrollToNote},
-        search_view::{Search, SearchOpen, SearchText},
-        select_subject::SelectSubject, side_panel::SidePanelState,
-    },
+    data::{query::use_subject_query, subjects::Subject},
+    views::{list_notes::ListNotes, search_view::Search, select_subject::SelectSubject, ViewState},
 };
 
-pub struct SelectedSubject(pub Option<SubjectId>);
-
-impl std::ops::Deref for SelectedSubject {
-    type Target = Option<SubjectId>;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
 pub fn Journal(cx: Scope) -> Element {
-    use_shared_state_provider(cx, || SearchText(String::new()));
-    use_shared_state_provider(cx, || SearchOpen(false));
-    use_shared_state_provider(cx, || ScrollToNote(None));
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let subjects = use_subject_query(cx).subjects();
-    let my_subject = use_shared_state::<SelectedSubject>(cx).unwrap();
-    let scroll_to_note = use_shared_state::<ScrollToNote>(cx).unwrap();
-    let side_panel = use_shared_state::<SidePanelState>(cx).unwrap();
 
-    let subject_name = my_subject
-        .read()
+    let ViewState {
+        tasks_only,
+        show_search,
+        selected_subject,
+        ..
+    } = &*view_state.read();
+
+    let subject_name = selected_subject
         .and_then(|id| subjects.get(&id))
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Journal".to_string());
 
     let show_subject_select = use_state(cx, || false);
-    let tasks_only = use_state(cx, || false);
-    let show_search = use_shared_state::<SearchOpen>(cx).unwrap();
 
     let store = use_store(cx);
-    let note_count = my_subject
-        .read()
-        .map_or(0, |s| store.read().subject_note_count(s).unwrap());
+    let note_count = selected_subject.map_or(0, |s| store.read().subject_note_count(s).unwrap());
 
     let delete_subject = move || {
-        let mut subject = my_subject.write();
-        if let Some(id) = subject.0 {
+        let mut state = view_state.write();
+        let subject = &mut state.selected_subject;
+        if let Some(id) = *subject {
             store.read().delete_subject(id).unwrap();
         }
-        subject.0 = None;
+        *subject = None;
     };
 
     let jump_to_subject = move |subject: Option<Subject>| {
-        my_subject.write().0 = subject.as_ref().map(|s| s.id);
-        scroll_to_note.write().0 = None;
+        let mut state = view_state.write();
+        if let Some(subject) = subject.as_ref() {
+            state.go_to_subject(subject.id);
+        } else {
+            state.go_to_journal();
+        }
         show_subject_select.set(false);
-        *side_panel.write() = match subject {
-            Some(subject) => SidePanelState::SubjectDetails(subject.id),
-            None => SidePanelState::Nothing,
-        };
     };
 
     render! {
@@ -80,7 +61,7 @@ pub fn Journal(cx: Scope) -> Element {
                     class: "select-column",
                     div {
                         class: "row",
-                        if note_count == 0 && my_subject.read().0 != None {
+                        if note_count == 0 && *selected_subject != None {
                             rsx! {
                                 button {
                                     class: "select-button",
@@ -90,27 +71,28 @@ pub fn Journal(cx: Scope) -> Element {
                             }
                         }
                         button {
-                            class: if show_search.read().0 {
+                            class: if *show_search {
                                 "select-button selected"
                             } else {
                                 "select-button"
                             },
                             onclick: |_| {
-                                let mut show_search = show_search.write();
-                                show_search.0 = !show_search.0;
+                                view_state.write().toggle_search();
                             },
                             "Search"
                         }
                         button {
-                            class: if *tasks_only.get() {
+                            class: if *tasks_only {
                                 "select-button selected"
                             } else {
                                 "select-button"
                             },
-                            onclick: |_| tasks_only.set(!*tasks_only.get()),
+                            onclick: |_| {
+                                view_state.write().toggle_tasks_only();
+                            },
                             "Tasks Only"
                         }
-                        if my_subject.read().0 != None {
+                        if *selected_subject != None {
                             rsx! {
                                 button {
                                     class: "select-button",
@@ -136,7 +118,7 @@ pub fn Journal(cx: Scope) -> Element {
                     }
                 }
             },
-            if show_search.read().0 {
+            if *show_search {
                 rsx! {
                     Search { }
                 }
@@ -144,9 +126,7 @@ pub fn Journal(cx: Scope) -> Element {
                 rsx! {
                     div {
                         class: "notes",
-                        ListNotes {
-                            tasks_only: *tasks_only.get(),
-                        }
+                        ListNotes { }
                     }
                 }
             }

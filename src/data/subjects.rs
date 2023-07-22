@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rusqlite::{params, ToSql, types::FromSql};
+use rusqlite::{params, types::FromSql, ToSql};
 use tracing::{debug, instrument};
 use uuid::Uuid;
 
