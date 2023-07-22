@@ -72,6 +72,8 @@ pub fn SidePanel(cx: Scope) -> Element {
         border-left: 1px solid #ccc;
         overflow: hidden;
 
+        display: grid;
+
         .side-panel-header {
             font-size: 1.2em;
             font-weight: bold;
@@ -257,14 +259,15 @@ fn FindSimilar(cx: Scope, text: String) -> Element {
 
     let style = css!(
         "
-        display: flex;
-        flex-direction: column;
+        display: grid;
         gap: 10px;
+        grid-template-rows: auto 1fr;
+        overflow: hidden;
 
         .similar-notes {
-            display: flex;
-            flex-direction: column;
+            display: grid;
             gap: 10px;
+            overflow-y: scroll;
 
             .wrapper {
                 max-height: 100px;
