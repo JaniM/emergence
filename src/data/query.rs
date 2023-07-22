@@ -126,7 +126,7 @@ impl Drop for SubjectQuery {
         let mut source = self.source.borrow_mut();
         source
             .update_callback
-            .retain(|cb| Arc::ptr_eq(cb, &self.update_callback));
+            .retain(|cb| !Arc::ptr_eq(cb, &self.update_callback));
     }
 }
 

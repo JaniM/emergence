@@ -12,9 +12,10 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
+use sir::AppStyle;
 use tracing::{info, metadata::LevelFilter};
 
-use crate::views::{journal::Journal, side_panel::{SidePanelState, SidePanel}};
+use crate::views::{journal::{Journal, SelectedSubject}, side_panel::{SidePanelState, SidePanel}};
 
 use clap::{Parser, ValueEnum};
 
@@ -167,13 +168,14 @@ struct AppProps {
     db_file: PathBuf,
 }
 
-fn App(cx: Scope<AppProps>) -> Element {
+fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
     // TODO: Use a context provider for this
     use_shared_state_provider(cx, || {
         Store::new(data::ConnectionType::File(cx.props.db_file.clone()))
     });
     use_shared_state_provider(cx, || ShowInput(false));
     use_shared_state_provider(cx, || SidePanelState::default());
+    use_shared_state_provider(cx, || SelectedSubject(None));
 
     let show_input = use_shared_state::<ShowInput>(cx).unwrap();
     let window = use_window(cx);
@@ -219,6 +221,7 @@ fn App(cx: Scope<AppProps>) -> Element {
 
     render! {
         style { include_str!("style.css") },
+        AppStyle { },
         div {
             class: "magic-capture",
             onkeydown: onkeydown,

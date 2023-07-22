@@ -44,7 +44,7 @@ div, textarea, input, button {
     background-color: #fbfbfb;
     display: grid;
     grid-template-columns:
-        fit-content(800px) minmax(250px, 1fr);
+        800px minmax(250px, 1fr);
     grid-template-rows: 100%;
 }
 
@@ -296,54 +296,6 @@ div, textarea, input, button {
     background-color: #ddd;
 }
 
-.select-subject-wrapper {
-    position: relative;
-    display: flex;
-    flex-flow: row;
-    justify-content: flex-end;
-}
-
-.select-subject {
-    position: absolute;
-    z-index: 10;
-    min-width: 200px;
-    overflow: hidden;
-    border: 1px solid #ccc;
-    background-color: #ccd;
-    padding: 5px;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-gap: 5px;
-}
-
-.select-subject .subject-search {
-    width: auto;
-    resize: none;
-}
-
-.select-subject .subjects {
-    overflow-y: scroll;
-    max-height: 400px;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-gap: 5px;
-}
-
-.select-subject .subjects > div {
-    max-width: 400px;
-    border: 1px solid #ccc;
-    background-color: #bbd;
-    padding: 5px;
-    white-space: pre-wrap;
-    text-align: left;
-    cursor: pointer;
-}
-
-.select-subject .subjects > div:hover,
-.select-subject .subjects > div:focus {
-    background-color: #ccd;
-}
-
 .note-dropdown {
     position: fixed;
     z-index: 3;
@@ -491,32 +443,4 @@ div, textarea, input, button {
     to {
         box-shadow: 0;
     }
-}
-
-.side-panel {
-    padding: 10px;
-    padding-right: 0;
-    background-color: #ddd;
-    border-left: 1px solid #ccc;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
-    gap: 10px;
-}
-
-.side-panel .side-panel-header {
-    font-size: 1.2em;
-    font-weight: bold;
-    text-align: center;
-}
-
-.similar-notes {
-    overflow-y: scroll;
-    max-height: 100%;
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-gap: 10px;
-    padding-top: 10px;
 }

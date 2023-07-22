@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use rusqlite::{params, ToSql};
+use rusqlite::{params, ToSql, types::FromSql};
 use tracing::{debug, instrument};
 use uuid::Uuid;
 
@@ -16,6 +16,7 @@ pub struct SubjectId(pub Uuid);
 pub struct SubjectData {
     pub id: SubjectId,
     pub name: String,
+    pub parent_id: Option<SubjectId>,
 }
 
 pub type Subject = Rc<SubjectData>;
@@ -23,6 +24,12 @@ pub type Subject = Rc<SubjectData>;
 impl ToSql for SubjectId {
     fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
         self.0.to_sql()
+    }
+}
+
+impl FromSql for SubjectId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        Uuid::column_result(value).map(SubjectId)
     }
 }
 
@@ -38,15 +45,16 @@ impl Store {
         debug!("Begin");
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, name
+            "SELECT id, name, parent_id
             FROM subjects
             ORDER BY name ASC",
         )?;
         let subjects = stmt
             .query_map(params![], |row| {
                 Ok(Rc::new(SubjectData {
-                    id: SubjectId(row.get(0)?),
+                    id: row.get(0)?,
                     name: row.get(1)?,
+                    parent_id: row.get(2)?,
                 }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -61,8 +69,8 @@ impl Store {
         self.conn
             .borrow()
             .prepare_cached(
-                "INSERT INTO subjects (id, name)
-                VALUES (?1, ?2)",
+                "INSERT INTO subjects (id, name, parent_id)
+                VALUES (?1, ?2, NULL)",
             )?
             .execute(params![id, name])?;
 
@@ -71,6 +79,7 @@ impl Store {
         Ok(Rc::new(SubjectData {
             id: SubjectId(id),
             name,
+            parent_id: None,
         }))
     }
 
@@ -83,6 +92,41 @@ impl Store {
         self.update_subject_sources();
 
         Ok(())
+    }
+
+    pub fn set_subject_parent(
+        &self,
+        subject: SubjectId,
+        parent: Option<SubjectId>,
+    ) -> rusqlite::Result<()> {
+        self.conn
+            .borrow()
+            .prepare_cached("UPDATE subjects SET parent_id = ?1 WHERE id = ?2")?
+            .execute(params![parent, subject.0])?;
+
+        self.update_subject_sources();
+
+        Ok(())
+    }
+
+    pub fn get_subject_children(&self, subject: SubjectId) -> rusqlite::Result<Vec<Subject>> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, name, parent_id
+            FROM subjects
+            WHERE parent_id = ?1
+            ORDER BY name ASC",
+        )?;
+        let subjects = stmt
+            .query_map(params![subject.0], |row| {
+                Ok(Rc::new(SubjectData {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    parent_id: row.get(2)?,
+                }))
+            })?
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(subjects)
     }
 
     pub fn import_subject(&self, subject: &SubjectData) -> rusqlite::Result<()> {

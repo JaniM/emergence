@@ -24,7 +24,6 @@ impl std::ops::Deref for SelectedSubject {
 }
 
 pub fn Journal(cx: Scope) -> Element {
-    use_shared_state_provider(cx, || SelectedSubject(None));
     use_shared_state_provider(cx, || SearchText(String::new()));
     use_shared_state_provider(cx, || SearchOpen(false));
     use_shared_state_provider(cx, || ScrollToNote(None));

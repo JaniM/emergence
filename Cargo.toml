@@ -30,6 +30,10 @@ lipsum = "0.9.0"
 rand = "0.8.5"
 itertools = "0.11.0"
 tantivy = "0.20.2"
+sir = { version = "0.3.0", features = ["dioxus"] }
+
+[patch.crates-io]
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "a96ccdc6f3ef536b1978d49df53660fa5089fe23" }
 
 [dev-dependencies]
 criterion = "0.4"

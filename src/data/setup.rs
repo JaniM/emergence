@@ -9,7 +9,9 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
 
         CREATE TABLE IF NOT EXISTS subjects (
             id BLOB PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE
+            name TEXT NOT NULL,
+            parent_id BLOB,
+            UNIQUE (name, parent_id)
         ) WITHOUT ROWID, STRICT;
 
         CREATE TABLE IF NOT EXISTS notes (
@@ -96,6 +98,19 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
         let tx = conn.transaction()?;
         tfidf::fill_word_occurence_table(&tx)?;
         tx.commit()?;
+    }
+
+    // Check if subjects.parent_id exists
+    let parent_id_exists = conn
+        .prepare_cached(
+            "SELECT * FROM pragma_table_info('subjects')
+            WHERE name = 'parent_id' LIMIT 1",
+        )?
+        .query_row(params![], |_| Ok(()))
+        .is_ok();
+
+    if !parent_id_exists {
+        conn.execute_batch("ALTER TABLE subjects ADD COLUMN parent_id BLOB;")?;
     }
 
     Ok(())
