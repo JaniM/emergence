@@ -72,6 +72,11 @@ fn Tabs(cx: Scope) -> Element {
             font-size: 1.2em;
             font-weight: bold;
             border-bottom: 2px solid transparent;
+            cursor: pointer;
+
+            &:hover {
+                border-bottom: 2px solid rgba(0, 0, 0, 0.5);
+            }
 
             &.selected {
                 border-bottom: 2px solid black;

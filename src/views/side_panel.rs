@@ -343,6 +343,7 @@ fn FindSimilar(cx: Scope, text: String) -> Element {
         flex-direction: column;
         gap: 10px;
         overflow: hidden;
+        padding: 10px 0px 0px 10px;
 
         .similar-notes {
             display: grid;
