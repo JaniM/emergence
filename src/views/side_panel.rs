@@ -46,9 +46,20 @@ impl SidePanelState {
 
 pub fn SidePanel(cx: Scope) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let subjects = use_subject_query(cx).subjects();
 
-    let view_state = view_state.read();
-    let content = match &view_state.side_panel {
+    let view_state_read = view_state.read();
+    let ViewState {
+        selected_subject,
+        ..
+    } = &*view_state_read;
+
+    let subject_name = selected_subject
+        .and_then(|id| subjects.get(&id))
+        .map(|s| s.name.clone())
+        .unwrap_or_else(|| "Journal".to_string());
+
+    let content = match &view_state_read.side_panel {
         SidePanelState::Nothing => rsx! {
             div {
             }
@@ -67,13 +78,12 @@ pub fn SidePanel(cx: Scope) -> Element {
 
     let style = css!(
         "
-        padding: 10px;
-        padding-right: 0;
         background-color: #ddd;
         border-left: 1px solid #ccc;
         overflow: hidden;
 
         display: grid;
+        grid-template-rows: auto 1fr;
 
         .side-panel-header {
             font-size: 1.2em;
@@ -81,12 +91,85 @@ pub fn SidePanel(cx: Scope) -> Element {
             margin-bottom: 10px;
             text-align: center;
         }
+
     "
     );
+
+    let header = css!("
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        border-bottom: 1px solid #bbb;
+
+        .row {
+            display: flex;
+            flex-direction: row;
+            
+            .title {
+                font-weight: bold;
+                font-size: 1.4em;
+                padding-left: 15px;
+                flex-grow: 1;
+            }
+            .select-button {
+                flex-grow: 0;
+                padding: 5px;
+                background-color: #bbb;
+                font-weight: bold;
+                cursor: pointer;
+    
+                &.selected {
+                    background-color: rgb(180, 200, 230);
+                }
+            }
+        }
+    ");
+
+    let show_subject_select = use_state(cx, || false);
 
     cx.render(rsx! {
         div {
             class: "{style}",
+            div {
+                class: "{header}",
+                div {
+                    class: "row",
+                    div {
+                        class: "title",
+                        "{subject_name}"
+                    }
+                    if selected_subject.is_some() {
+                        rsx! {
+                            div {
+                                class: "select-button",
+                                onclick: move |_| {
+                                    view_state.write().go_to_journal();
+                                },
+                                "Journal"
+                            }
+                        }
+                    }
+                    div {
+                        class: "select-button",
+                        onclick: move |_| {
+                            show_subject_select.set(!*show_subject_select.get());
+                        },
+                        "▼"
+                    }
+                }
+                if *show_subject_select.get() {
+                    rsx! {
+                        SelectSubject {
+                            on_select: move |s: Subject| {
+                                view_state.write().go_to_subject(s.id);
+                                show_subject_select.set(false);
+                            },
+                            on_cancel: |_| show_subject_select.set(false),
+                            ignore_subjects: vec![],
+                        }
+                    }
+                }
+            }
             content
         }
     })
@@ -129,6 +212,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
 
     let style = css!(
         "
+        padding: 10px;
         display: flex;
         flex-direction: column;
         gap: 10px;
@@ -230,10 +314,6 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     cx.render(rsx! {
         div {
             class: "{style}",
-            div {
-                class: "side-panel-header",
-                "Subject Details"
-            }
             div {
                 parent
             }

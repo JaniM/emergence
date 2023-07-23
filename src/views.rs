@@ -37,18 +37,25 @@ impl ViewState {
         self.scroll_to_note = Some(note);
     }
 
-    pub fn toggle_search(&mut self) {
-        self.show_search = !self.show_search;
+    pub fn show_search(&mut self) {
+        self.show_search = true;
+        self.tasks_only = false;
+    }
+
+    pub fn show_tasks_only(&mut self) {
+        self.tasks_only = true;
+        self.show_search = false;
+    }
+
+    pub fn show_notes_only(&mut self) {
+        self.tasks_only = false;
+        self.show_search = false;
     }
 
     pub fn go_to_journal(&mut self) {
         self.selected_subject = None;
         self.scroll_to_note = None;
         self.side_panel = SidePanelState::Nothing;
-    }
-
-    pub fn toggle_tasks_only(&mut self) {
-        self.tasks_only = !self.tasks_only;
     }
 
     pub fn start_note_input(&mut self) {

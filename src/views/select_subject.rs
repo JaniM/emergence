@@ -119,7 +119,6 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         display: flex;
         flex-direction: row;
         justify-content: flex-end;
-        min-width: 400px;
 
         .select-subject {
             position: absolute;
@@ -240,7 +239,10 @@ fn SubjectTreeView<'a>(cx: Scope<'a, SubjectTreeProps<'a>>) -> Element {
         "
         display: flex;
         flex-direction: column;
-        margin-left: 15px;
+        /* padding + margin + border = 15px */
+        padding-left: 7px;
+        margin-left: 7px;
+        border-left: 1px solid #888;
     "
     );
 

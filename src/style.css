@@ -57,40 +57,6 @@ div, textarea, input, button {
         display: none;
     }
 }
-    
-.journal {
-    display: grid;
-    grid-template-columns: 1fr;
-    grid-template-rows: auto 1fr;
-
-    max-width: 800px;
-    position: relative;
-    /* left: calc(max(50% - 400px - 50px, 0px)); */
-}
-
-.journal .header {
-    padding-bottom: 10px;
-    display: grid;
-    grid-template-columns: 100px 1fr auto;
-}
-
-.journal .header .title {
-    font-size: 1.4em;
-    padding-left: 15px;
-}
-
-.journal .header .select-button {
-    border: 1px solid #ccc;
-    margin: -1px;
-    padding: 5px;
-    background-color: #eee;
-    font-style: italic;
-    cursor: pointer;
-}
-
-.journal .header .select-button.selected {
-    background-color: rgb(180, 200, 230);
-}
 
 .row {
     display: flex;
@@ -98,19 +64,6 @@ div, textarea, input, button {
     justify-content: flex-start;
     align-items: center;
     gap: 5px;
-}
-
-.journal .header .select-column {
-    display: flex;
-    flex-direction: column;
-    justify-content: flex-end;
-    align-items: flex-end;
-}
-
-.journal .notes {
-    max-height: 100%;
-    display: grid;
-    overflow: hidden;
 }
 
 .note-grid-wrapper {
