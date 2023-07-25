@@ -54,10 +54,6 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         }
     };
 
-    let on_delete = move |_| {
-        state.set(State::ConfirmDelete);
-    };
-
     let actually_delete = {
         let note = note.clone();
         move |_| {
@@ -79,14 +75,23 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         }
     };
 
+    let on_dropdown_action = move |action: DropdownAction| match action {
+        DropdownAction::Edit => state.set(State::Edit),
+        DropdownAction::Delete => state.set(State::ConfirmDelete),
+        DropdownAction::MakeTask => make_task(()),
+        DropdownAction::Bump => {
+            let new_note = note.with_created_at(chrono::Local::now()).to_note();
+            store.read().update_note(new_note).unwrap();
+            state.set(State::Normal);
+        }
+    };
+
     let dropdown = if let State::Dropdown(x, y) = *state.get() {
         Some(rsx! {
             Dropdown {
                 pos: (x, y),
                 note: note.clone(),
-                on_edit: |_| state.set(State::Edit),
-                on_delete: on_delete,
-                on_make_task: make_task,
+                on_action: on_dropdown_action,
                 on_close: |_| state.set(State::Normal),
             }
         })
@@ -206,13 +211,18 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     cx.render(content)
 }
 
+enum DropdownAction {
+    Edit,
+    Delete,
+    MakeTask,
+    Bump,
+}
+
 #[derive(Props)]
 struct DropdownProps<'a> {
     pos: (f64, f64),
     note: Note,
-    on_edit: EventHandler<'a, ()>,
-    on_delete: EventHandler<'a, ()>,
-    on_make_task: EventHandler<'a, ()>,
+    on_action: EventHandler<'a, DropdownAction>,
     on_close: EventHandler<'a, ()>,
 }
 
@@ -228,7 +238,7 @@ fn Dropdown<'a>(cx: Scope<'a, DropdownProps<'a>>) -> Element<'a> {
             onblur: |_| cx.props.on_close.call(()),
             div {
                 class: "note-dropdown-item",
-                onclick: |_| cx.props.on_make_task.call(()),
+                onclick: |_| cx.props.on_action.call(DropdownAction::MakeTask),
                 if cx.props.note.task_state == TaskState::NotATask {
                     "Make Task"
                 } else {
@@ -237,12 +247,17 @@ fn Dropdown<'a>(cx: Scope<'a, DropdownProps<'a>>) -> Element<'a> {
             },
             div {
                 class: "note-dropdown-item",
-                onclick: |_| cx.props.on_edit.call(()),
+                onclick: |_| cx.props.on_action.call(DropdownAction::Bump),
+                "Bump to Today"
+            },
+            div {
+                class: "note-dropdown-item",
+                onclick: |_| cx.props.on_action.call(DropdownAction::Edit),
                 "Edit"
             },
             div {
                 class: "note-dropdown-item",
-                onclick: |_| cx.props.on_delete.call(()),
+                onclick: |_| cx.props.on_action.call(DropdownAction::Delete),
                 "Delete"
             },
         }

@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 use const_format::formatcp;
-use rusqlite::{params, Connection, Row};
+use rusqlite::{named_params, params, Connection, Row};
 use std::rc::Rc;
 use tracing::{debug, instrument};
 use uuid::Uuid;
@@ -130,6 +130,13 @@ impl NoteData {
             ..self.clone()
         }
     }
+
+    pub fn with_created_at(&self, created_at: DateTime<Local>) -> Self {
+        Self {
+            created_at,
+            ..self.clone()
+        }
+    }
 }
 
 impl Store {
@@ -240,17 +247,19 @@ impl Store {
 
             tx.prepare_cached(
                 "UPDATE notes
-                SET text = ?2,
-                    modified_at = ?3,
-                    task_state = ?4
-                WHERE id = ?1",
+                SET text = :text,
+                    created_at = :created_at,
+                    modified_at = :modified_at,
+                    task_state = :task_state
+                WHERE id = :id",
             )?
-            .execute(params![
-                note.id.0,
-                note.text,
-                Local::now().naive_local().timestamp_nanos(),
-                note.task_state.to_db_value()
-            ])?;
+            .execute(named_params! {
+               ":id": note.id.0,
+               ":text": note.text,
+               ":created_at": note.created_at.naive_utc().timestamp_nanos(),
+               ":modified_at": Local::now().naive_utc().timestamp_nanos(),
+               ":task_state": note.task_state.to_db_value()
+            })?;
 
             tx.prepare_cached(
                 "DELETE FROM notes_subjects
