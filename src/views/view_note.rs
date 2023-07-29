@@ -111,8 +111,9 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "task-button todo",
                 onclick: |_| {
-                    let new_note = cx.props.note.with_task_state(TaskState::Done).to_note();
-                    store.read().update_note(new_note).unwrap();
+                    let mut new_note = cx.props.note.with_task_state(TaskState::Done);
+                    new_note.done_at = Some(chrono::Local::now());
+                    store.read().update_note(new_note.to_note()).unwrap();
                 },
                 title: "TODO"
             }

@@ -29,6 +29,7 @@ pub struct NoteData {
     pub task_state: TaskState,
     pub created_at: DateTime<Local>,
     pub modified_at: DateTime<Local>,
+    pub done_at: Option<DateTime<Local>>,
 }
 
 pub type Note = Rc<NoteData>;
@@ -187,6 +188,7 @@ impl Store {
             task_state: TaskState::NotATask,
             created_at,
             modified_at: created_at,
+            done_at: None,
         });
         search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
 
@@ -250,6 +252,7 @@ impl Store {
                 SET text = :text,
                     created_at = :created_at,
                     modified_at = :modified_at,
+                    done_at = :done_at,
                     task_state = :task_state
                 WHERE id = :id",
             )?
@@ -258,6 +261,7 @@ impl Store {
                ":text": note.text,
                ":created_at": note.created_at.naive_utc().timestamp_nanos(),
                ":modified_at": Local::now().naive_utc().timestamp_nanos(),
+               ":done_at": note.done_at.map(|ts| ts.naive_utc().timestamp_nanos()),
                ":task_state": note.task_state.to_db_value()
             })?;
 
@@ -381,7 +385,8 @@ pub const NOTE_COLUMNS: &'static str = "
     as subjects,
     n.task_state,
     n.created_at,
-    n.modified_at
+    n.modified_at,
+    n.done_at
 ";
 
 const NOTE_LIST_ALL: &'static str = formatcp!(
@@ -487,5 +492,8 @@ pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
         task_state: TaskState::from_db_value(row.get(4)?),
         created_at: Local.timestamp_nanos(row.get(5)?),
         modified_at: Local.timestamp_nanos(row.get(6)?),
+        done_at: row
+            .get::<_, Option<i64>>(7)?
+            .map(|ts| Local.timestamp_nanos(ts)),
     }))
 }

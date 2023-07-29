@@ -21,7 +21,8 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             -- 0 = not a task, 1 = incomplete, 2 = complete
             task_state INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
-            modified_at INTEGER NOT NULL
+            modified_at INTEGER NOT NULL,
+            done_at INTEGER
         ) STRICT;
 
         CREATE UNIQUE INDEX IF NOT EXISTS notes_id_index ON notes (id);
@@ -111,6 +112,21 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
 
     if !parent_id_exists {
         conn.execute_batch("ALTER TABLE subjects ADD COLUMN parent_id BLOB;")?;
+    }
+
+    let done_at_exists = conn
+        .prepare_cached(
+            "SELECT * FROM pragma_table_info('notes')
+            WHERE name = 'done_at' LIMIT 1",
+        )?
+        .query_row(params![], |_| Ok(()))
+        .is_ok();
+
+    if !done_at_exists {
+        conn.execute_batch("
+            ALTER TABLE notes ADD COLUMN done_at INTEGER;
+            UPDATE notes SET done_at = modified_at WHERE task_state = 2;
+        ")?;
     }
 
     Ok(())
