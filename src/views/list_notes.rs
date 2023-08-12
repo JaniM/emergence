@@ -1,12 +1,9 @@
 use crate::{
-    data::{query::use_note_query, subjects::Subject},
+    data::subjects::Subject,
     views::{note_input::CreateNote, scroll_to::ScrollTo, view_note::ViewNote, ViewState},
 };
 use dioxus::prelude::*;
-use emergence::data::{
-    notes::{Note, NoteSearch, TaskState},
-    query::{use_store, use_store_event_query},
-};
+use emergence::data::notes::{Note, NoteSearch, TaskState};
 use std::collections::BTreeMap;
 
 type NoteGroup<T> = (chrono::NaiveDate, String, Vec<T>);
@@ -54,7 +51,7 @@ pub fn ListNotes(cx: Scope) -> Element {
         subject_id: *selected_subject,
         task_only: *tasks_only,
     };
-    let query = use_note_query(cx, search).notes();
+    let query = view_state.read().layer.get_notes_for_search(search);
 
     let mut groups = if !*tasks_only {
         group_by_date(&query)
@@ -215,24 +212,13 @@ pub fn ListNotes(cx: Scope) -> Element {
 #[inline_props]
 pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let store = use_store(cx);
 
-    let store_event = use_store_event_query(cx);
-
-    let query_fut = use_future(
-        cx,
-        (search_text, &store_event.count()),
-        move |(search_text, _)| {
-            let search_text = search_text.trim().to_string();
-            let search = store.read().search.clone();
-            async move {
-                if search_text.is_empty() {
-                    return vec![];
-                }
-                search.perform_search(search_text).await
-            }
-        },
-    );
+    let event_count = view_state.read().layer.event_count();
+    let query_fut = use_future(cx, (search_text, &event_count), move |(search_text, _)| {
+        let search_text = search_text.trim().to_string();
+        let search = view_state.read().layer.search();
+        async move { search.perform_search(search_text).await }
+    });
     let query = match query_fut.value() {
         Some(query) => query,
         _ => return render! { div { "Loading..." } },

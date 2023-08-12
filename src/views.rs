@@ -13,7 +13,6 @@ use emergence::data::{notes::NoteId, subjects::SubjectId};
 
 use self::side_panel::SidePanelState;
 
-#[derive(Default, Clone)]
 pub struct ViewState {
     pub show_input: bool,
     pub show_search: bool,
@@ -22,9 +21,23 @@ pub struct ViewState {
     pub scroll_to_note: Option<NoteId>,
     pub selected_subject: Option<SubjectId>,
     pub side_panel: SidePanelState,
+    pub layer: emergence::data::layer::Layer,
 }
 
 impl ViewState {
+    pub fn new(layer: emergence::data::layer::Layer) -> Self {
+        Self {
+            show_input: false,
+            show_search: false,
+            search_text: String::new(),
+            tasks_only: false,
+            scroll_to_note: None,
+            selected_subject: None,
+            side_panel: SidePanelState::Nothing,
+            layer,
+        }
+    }
+
     pub fn go_to_subject(&mut self, subject: SubjectId) {
         self.selected_subject = Some(subject);
         self.scroll_to_note = None;

@@ -2,11 +2,11 @@ pub mod explain;
 pub mod export;
 mod functions;
 pub mod notes;
-pub mod query;
 pub mod search;
 mod setup;
 pub mod subjects;
 pub mod tfidf;
+pub mod layer;
 
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
@@ -15,17 +15,11 @@ use std::{cell::RefCell, sync::Arc};
 use tracing::{debug, info, instrument};
 use uuid::Uuid;
 
-use query::NoteQuerySource;
 use subjects::SubjectId;
-
-use self::query::{StoreEventSource, SubjectQuerySource};
 
 pub struct Store {
     pub conn: Rc<RefCell<rusqlite::Connection>>,
     pub search: search::SearchWorker,
-    update_targets: Rc<RefCell<Vec<Rc<RefCell<StoreEventSource>>>>>,
-    note_sources: Rc<RefCell<Vec<Rc<RefCell<NoteQuerySource>>>>>,
-    subject_source: Rc<RefCell<SubjectQuerySource>>,
 
     index_writer: RefCell<tantivy::IndexWriter>,
 }
@@ -66,17 +60,8 @@ impl Store {
         let store = Self {
             conn: Rc::new(RefCell::new(conn)),
             search: search::SearchWorker::start_search_thread(file, index.clone()),
-            note_sources: Rc::new(RefCell::new(Vec::new())),
-            subject_source: Rc::new(RefCell::new(SubjectQuerySource {
-                subjects: Default::default(),
-                update_callback: Vec::new(),
-            })),
-            update_targets: Default::default(),
             index_writer,
         };
-
-        // shove_test_data(&mut store.conn.borrow_mut()).unwrap();
-        store.update_subject_sources();
 
         debug!("Finished");
         store
@@ -151,22 +136,25 @@ mod test {
         store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
         store.add_note(NoteBuilder::new("Test note 2".to_string()).subject(subject2.id))?;
 
-        let notes = store.get_notes(NoteSearch::new()).unwrap();
+        let note_ids = store.find_notes(NoteSearch::new()).unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 2);
         assert_eq!(notes[0].text, "Test note 2");
         assert_eq!(notes[0].subjects, vec![subject2.id]);
         assert_eq!(notes[1].text, "Test note 1");
         assert_eq!(notes[1].subjects, vec![subject1.id]);
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject1.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject1.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].text, "Test note 1");
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject2.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject2.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].text, "Test note 2");
 
@@ -217,7 +205,8 @@ mod test {
 
         store.update_note(modified_note1)?;
 
-        let notes = store.get_notes(NoteSearch::new()).unwrap();
+        let note_ids = store.find_notes(NoteSearch::new()).unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 2);
 
         assert_eq!(notes[0].text, "Test note 2");
@@ -228,15 +217,17 @@ mod test {
         assert!(notes[1].modified_at > notes[1].created_at);
         assert_eq!(notes[1].subjects, vec![subject2.id]);
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject1.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject1.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].text, "Test note 2");
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject2.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject2.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].text, "Test note 1 modified");
 
@@ -256,27 +247,30 @@ mod test {
 
         store.delete_note(note1.id)?;
 
-        let notes = store.get_notes(NoteSearch::new()).unwrap();
+        let note_ids = store.find_notes(NoteSearch::new()).unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
 
         assert_eq!(notes[0].text, "Test note 2");
         assert_eq!(notes[0].subjects, vec![subject1.id]);
         assert!(notes[0].modified_at == notes[0].created_at);
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject1.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject1.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 1);
         assert_eq!(notes[0].text, "Test note 2");
 
-        let notes = store
-            .get_notes(NoteSearch::new().subject(subject2.id))
+        let note_ids = store
+            .find_notes(NoteSearch::new().subject(subject2.id))
             .unwrap();
+        let notes = store.get_notes(&note_ids).unwrap();
         assert_eq!(notes.len(), 0);
 
         store.delete_note(note2.id)?;
 
-        let notes = store.get_notes(NoteSearch::new()).unwrap();
+        let notes = store.find_notes(NoteSearch::new()).unwrap();
         assert_eq!(notes.len(), 0);
 
         Ok(())
@@ -296,21 +290,21 @@ mod test {
 
         let search = NoteSearch::new().task_only(true);
 
-        let notes = store.get_notes(search).unwrap();
+        let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 0);
 
         store.update_note(note1.with_task_state(TaskState::Todo).to_note())?;
 
-        let notes = store.get_notes(search).unwrap();
+        let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 1);
 
-        let notes = store.get_notes(search.subject(subject1.id)).unwrap();
+        let notes = store.find_notes(search.subject(subject1.id)).unwrap();
         assert_eq!(notes.len(), 1);
-        let notes = store.get_notes(search.subject(subject2.id)).unwrap();
+        let notes = store.find_notes(search.subject(subject2.id)).unwrap();
         assert_eq!(notes.len(), 0);
 
         store.update_note(note1.with_task_state(TaskState::Done).to_note())?;
-        let notes = store.get_notes(search).unwrap();
+        let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 1);
 
         store.update_note(
@@ -320,12 +314,12 @@ mod test {
                 .to_note(),
         )?;
 
-        let notes = store.get_notes(search).unwrap();
+        let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 1);
 
-        let notes = store.get_notes(search.subject(subject1.id)).unwrap();
+        let notes = store.find_notes(search.subject(subject1.id)).unwrap();
         assert_eq!(notes.len(), 0);
-        let notes = store.get_notes(search.subject(subject2.id)).unwrap();
+        let notes = store.find_notes(search.subject(subject2.id)).unwrap();
         assert_eq!(notes.len(), 1);
 
         Ok(())

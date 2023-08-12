@@ -1,8 +1,8 @@
 use chrono::prelude::*;
 use const_format::formatcp;
-use rusqlite::{named_params, params, Connection, Row};
+use rusqlite::{named_params, params, types::FromSql, Connection, Row, ToSql};
 use std::rc::Rc;
-use tracing::{debug, instrument};
+use tracing::{debug, instrument, trace};
 use uuid::Uuid;
 
 use crate::data::{search, tfidf};
@@ -12,6 +12,18 @@ use super::{subjects::SubjectId, Store};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 pub struct NoteId(pub Uuid);
+
+impl ToSql for NoteId {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'_>> {
+        self.0.to_sql()
+    }
+}
+
+impl FromSql for NoteId {
+    fn column_result(value: rusqlite::types::ValueRef<'_>) -> rusqlite::types::FromSqlResult<Self> {
+        Ok(NoteId(Uuid::column_result(value)?))
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub enum TaskState {
@@ -166,7 +178,9 @@ impl Store {
 
             rowid = tx.last_insert_rowid();
 
-            for subject in &note.subjects {
+            let subjects = subjects_or_nil(&note.subjects);
+
+            for subject in subjects {
                 tx.prepare_cached(
                     "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
                 )?
@@ -177,8 +191,6 @@ impl Store {
 
             tx.commit()?;
         }
-
-        self.update_note_sources();
 
         let note = Rc::new(NoteData {
             rowid: rowid as u64,
@@ -200,19 +212,20 @@ impl Store {
         let tx = conn.transaction()?;
         tx.prepare_cached(
             "INSERT INTO notes (
-                    id, text, task_state, created_at, modified_at
+                    id, text, task_state, created_at, modified_at, done_at
                 )
-                VALUES (?1, ?2, ?3, ?4, ?5)",
+                VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?
         .execute(params![
             note.id.0,
             &note.text,
             note.task_state.to_db_value(),
             note.created_at.naive_utc().timestamp_nanos(),
-            note.modified_at.naive_utc().timestamp_nanos()
+            note.modified_at.naive_utc().timestamp_nanos(),
+            note.done_at.map(|ts| ts.naive_utc().timestamp_nanos())
         ])?;
 
-        for subject in &note.subjects {
+        for subject in subjects_or_nil(&note.subjects) {
             tx.prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
                 .execute(params![note.id.0, subject.0])?;
         }
@@ -271,7 +284,7 @@ impl Store {
             )?
             .execute(params![note.id.0])?;
 
-            for subject in &note.subjects {
+            for subject in subjects_or_nil(&note.subjects) {
                 tx.prepare_cached(
                     "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
                 )?
@@ -280,8 +293,6 @@ impl Store {
 
             tx.commit()?;
         }
-
-        self.update_note_sources();
 
         Ok(())
     }
@@ -320,13 +331,11 @@ impl Store {
             tx.commit()?;
         }
 
-        self.update_note_sources();
-
         Ok(())
     }
 
     #[instrument(skip(self))]
-    pub fn get_notes(&self, query: NoteSearch) -> rusqlite::Result<Vec<Note>> {
+    pub fn find_notes(&self, query: NoteSearch) -> rusqlite::Result<Vec<NoteId>> {
         debug!("Begin");
 
         let conn = self.conn.borrow();
@@ -345,8 +354,32 @@ impl Store {
             } => notes_list_all(&conn)?,
         };
 
+        // Assert notes are unique
+        debug_assert_eq!(
+            notes.len(),
+            notes.iter().collect::<std::collections::HashSet<_>>().len()
+        );
+
         debug!("Finished");
         Ok(notes)
+    }
+
+    pub fn get_note(&self, note: NoteId) -> rusqlite::Result<Note> {
+        trace!("Getting note {}", note.0);
+        let conn = self.conn.borrow();
+        let notes = conn
+            .prepare_cached(formatcp!(
+                r#"SELECT {columns}
+                    FROM notes n
+                    WHERE n.id = ?1"#,
+                columns = SINGLE_NOTE_COLUMNS
+            ))?
+            .query_row(params![note.0], map_row_to_note)?;
+        Ok(notes)
+    }
+
+    pub fn get_notes(&self, notes: &[NoteId]) -> rusqlite::Result<Vec<Note>> {
+        notes.iter().map(|note| self.get_note(*note)).collect()
     }
 
     pub fn get_all_notes(&self) -> rusqlite::Result<Vec<Note>> {
@@ -356,7 +389,7 @@ impl Store {
                 r#"SELECT {columns}
                     FROM notes n
                     ORDER BY n.created_at DESC"#,
-                columns = NOTE_COLUMNS
+                columns = SINGLE_NOTE_COLUMNS
             ))?
             .query_map(params![], map_row_to_note)?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -377,7 +410,7 @@ impl Store {
 
 const PAGE_SIZE: usize = 200;
 
-pub const NOTE_COLUMNS: &'static str = "
+pub const SINGLE_NOTE_COLUMNS: &'static str = "
     n.rowid,
     n.id,
     n.text,
@@ -390,22 +423,19 @@ pub const NOTE_COLUMNS: &'static str = "
 ";
 
 const NOTE_LIST_ALL: &'static str = formatcp!(
-    r#"SELECT {columns}
-    FROM notes n
-    ORDER BY n.created_at DESC
+    r#"SELECT DISTINCT s.note_id
+    FROM notes_search s
+    ORDER BY s.created_at DESC
     LIMIT {page}"#,
-    columns = NOTE_COLUMNS,
     page = PAGE_SIZE
 );
 
 const NOTE_SEARCH_BY_SUBJECT: &'static str = formatcp!(
-    r#"SELECT {columns}
+    r#"SELECT s.note_id
     FROM notes_search s
-    INNER JOIN notes n ON s.note_id = n.rowid
     WHERE s.subject_id = ?1
     ORDER BY s.created_at DESC
     LIMIT {page}"#,
-    columns = NOTE_COLUMNS,
     page = PAGE_SIZE
 );
 
@@ -426,54 +456,47 @@ pub fn query_for_search(query: NoteSearch) -> String {
     }
 }
 
-fn notes_list_all(conn: &Connection) -> rusqlite::Result<Vec<Note>> {
+fn notes_list_all(conn: &Connection) -> rusqlite::Result<Vec<NoteId>> {
     conn.prepare_cached(NOTE_LIST_ALL)?
-        .query_map(params![], map_row_to_note)?
+        .query_map(params![], |row| row.get(0))?
         .collect()
 }
 
-fn notes_search_by_subject(conn: &Connection, subject: SubjectId) -> rusqlite::Result<Vec<Note>> {
+fn notes_search_by_subject(conn: &Connection, subject: SubjectId) -> rusqlite::Result<Vec<NoteId>> {
     conn.prepare_cached(NOTE_SEARCH_BY_SUBJECT)?
-        .query_map(params![subject], map_row_to_note)?
+        .query_map(params![subject], |row| row.get(0))?
         .collect()
 }
 
 fn tasks_search_by_subject(
     conn: &Connection,
     subject: Option<SubjectId>,
-) -> rusqlite::Result<Vec<Note>> {
+) -> rusqlite::Result<Vec<NoteId>> {
     let search = tasks_query(subject);
     let params1 = params![subject];
     let params2 = params![];
     let params = if subject.is_some() { params1 } else { params2 };
     conn.prepare_cached(&search)?
-        .query_map(params, map_row_to_note)?
+        .query_map(params, |row| row.get(0))?
         .collect()
 }
 
 fn tasks_query(subject: Option<SubjectId>) -> String {
     let search = format!(
-        r#"SELECT {columns}
-        FROM notes n
-        {subject_clause}
+        r#"SELECT DISTINCT notes_search.note_id
+        FROM notes_search
         WHERE notes_search.task_state > 0 
+        {subject_clause}
         ORDER BY notes_search.task_state ASC, notes_search.created_at DESC
         LIMIT {page}"#,
-        columns = NOTE_COLUMNS,
         page = PAGE_SIZE,
         subject_clause = if subject.is_some() {
-            "INNER JOIN notes_search 
-            ON notes_search.note_id = n.rowid AND notes_search.subject_id = ?1"
+            "AND notes_search.subject_id = ?1"
         } else {
             ""
         }
     );
 
-    let search = if subject.is_some() {
-        search
-    } else {
-        search.replace("notes_search", "n")
-    };
     search
 }
 
@@ -481,7 +504,9 @@ pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
     let subjects_blob = row.get_ref(3)?.as_blob_or_null()?.unwrap_or_default();
     let subjects = subjects_blob
         .chunks_exact(16)
-        .map(|chunk| SubjectId(Uuid::from_slice(chunk).unwrap()))
+        .map(|chunk| Uuid::from_slice(chunk).unwrap())
+        .filter(|id| !id.is_nil())
+        .map(SubjectId)
         .collect();
 
     Ok(Rc::new(NoteData {
@@ -496,4 +521,14 @@ pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
             .get::<_, Option<i64>>(7)?
             .map(|ts| Local.timestamp_nanos(ts)),
     }))
+}
+
+fn subjects_or_nil(subjects: &[SubjectId]) -> &[SubjectId] {
+    const NO_SUBJECT: [SubjectId; 1] = [SubjectId(Uuid::nil())];
+
+    if subjects.is_empty() {
+        &NO_SUBJECT
+    } else {
+        subjects
+    }
 }

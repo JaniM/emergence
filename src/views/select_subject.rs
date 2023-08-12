@@ -1,11 +1,12 @@
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
-use crate::data::query::{use_store, use_subject_query};
 use crate::data::subjects::{Subject, SubjectId};
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
 use sir::css;
+
+use super::ViewState;
 
 const FOLDER_ICON: &'static str = "▼";
 
@@ -19,15 +20,15 @@ pub struct Props<'a> {
 }
 
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
-    let store = use_store(cx);
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
     let search = use_state(cx, String::new);
 
-    let all_subjects = use_subject_query(cx).subjects();
+    let all_subjects = view_state.read().layer.get_subjects();
 
     // TODO: Add semantic sorting
     let filtered_subjects = use_memo(
         cx,
-        (&cx.props.ignore_subjects, &*all_subjects, search),
+        (&cx.props.ignore_subjects, &all_subjects, search),
         |(ignore_subjects, subjects, search)| {
             let mut subjects = subjects
                 .values()
@@ -53,7 +54,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
                     Some(subject) if subject.name.to_lowercase() == search.to_lowercase() => {
                         subject.clone()
                     }
-                    _ => store.write().add_subject(search.clone()).unwrap(),
+                    _ => view_state.write().layer.create_subject(search.clone()),
                 };
                 cx.props.on_select.call(subject);
             }
@@ -93,7 +94,6 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         "
     );
 
-    let all_subjects = Rc::new(all_subjects.clone());
     let tree_view = rsx! {
         div {
             class: "{tree_view_style}",

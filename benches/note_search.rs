@@ -15,12 +15,12 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     let subject = subjects.first().unwrap();
 
     group.bench_function("Read all notes", |b| {
-        b.iter(|| store.get_notes(NoteSearch::default()))
+        b.iter(|| store.find_notes(NoteSearch::default()))
     });
 
     group.bench_function("Read notes from subject", |b| {
         b.iter(|| {
-            store.get_notes(NoteSearch {
+            store.find_notes(NoteSearch {
                 subject_id: Some(subject.id),
                 ..Default::default()
             })
@@ -29,7 +29,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("Read all tasks", |b| {
         b.iter(|| {
-            store.get_notes(NoteSearch {
+            store.find_notes(NoteSearch {
                 task_only: true,
                 ..Default::default()
             })
@@ -38,7 +38,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
 
     group.bench_function("Read tasks from subject", |b| {
         b.iter(|| {
-            store.get_notes(NoteSearch {
+            store.find_notes(NoteSearch {
                 subject_id: Some(subject.id),
                 task_only: true,
                 ..Default::default()

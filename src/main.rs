@@ -4,7 +4,7 @@ mod views;
 
 use std::path::PathBuf;
 
-use dioxus_desktop::{use_eval, use_window};
+use dioxus_desktop::use_window;
 pub use emergence::data;
 
 use data::Store;
@@ -167,11 +167,11 @@ struct AppProps {
 }
 
 fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
-    // TODO: Use a context provider for this
     use_shared_state_provider(cx, || {
-        Store::new(data::ConnectionType::File(cx.props.db_file.clone()))
+        let store = Store::new(data::ConnectionType::File(cx.props.db_file.clone()));
+        let layer = data::layer::Layer::new(store);
+        ViewState::new(layer)
     });
-    use_shared_state_provider(cx, || ViewState::default());
 
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
     let window = use_window(cx);
@@ -191,7 +191,7 @@ fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
             window.eventsRegistered = true;
         }
     "#;
-    use_eval(cx)(js.to_string());
+    use_eval(cx)(js).unwrap();
 
     let onkeydown = move |e: KeyboardEvent| match e.key() {
         Key::Character(c) if e.modifiers().contains(Modifiers::CONTROL) => match c.as_str() {

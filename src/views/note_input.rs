@@ -1,18 +1,14 @@
-use std::{ops::Deref, rc::Rc};
+use std::rc::Rc;
 
 use crate::{
-    data::{
-        query::use_store,
-        subjects::{Subject, SubjectId},
-    },
+    data::subjects::{Subject, SubjectId},
     views::{select_subject::SelectSubject, view_note::SubjectCards, ViewState},
 };
 use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use dioxus_desktop::use_eval;
-use emergence::data::notes::{Note, NoteBuilder, NoteData, TaskState};
+use emergence::data::notes::{Note, NoteBuilder, TaskState};
 
 #[derive(Props)]
 pub struct CreateNoteProps<'a> {
@@ -24,7 +20,7 @@ pub struct CreateNoteProps<'a> {
 }
 
 pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
-    let store = use_store(cx);
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let on_create_note = |(text, subjects): (String, Vec<SubjectId>)| {
         if !text.is_empty() {
@@ -35,7 +31,7 @@ pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
                 } else {
                     TaskState::NotATask
                 });
-            store.read().add_note(note).unwrap();
+            view_state.write().layer.create_note(note);
         }
         cx.props.on_create_note.call(text);
     };
@@ -56,24 +52,19 @@ pub struct EditNoteProps<'a> {
 }
 
 pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
-    let store = use_store(cx);
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let note_id = cx.props.note.id;
 
     let on_done = move |_| {
         cx.props.on_done.call(());
     };
 
-    let on_create_note = {
-        let note = cx.props.note.clone();
-        move |(text, subjects): (String, Vec<SubjectId>)| {
-            let new_note = NoteData {
-                text: text.clone(),
-                subjects: subjects,
-                ..note.deref().clone()
-            }
-            .to_note();
-            store.write().update_note(new_note).unwrap();
-            cx.props.on_done.call(());
-        }
+    let on_create_note = move |(text, subjects): (String, Vec<SubjectId>)| {
+        view_state.write().layer.edit_note_with(note_id, |note| {
+            note.text = text;
+            note.subjects = subjects;
+        });
+        cx.props.on_done.call(());
     };
 
     cx.render(rsx! {
@@ -123,7 +114,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     // Adapted from https://stackoverflow.com/a/25621277
     let js_eval = use_eval(cx);
     let size_textareas = move || {
-        js_eval(TEXTAREA_HACK.to_string());
+        js_eval(TEXTAREA_HACK).unwrap();
     };
 
     // TODO: Combine these states.

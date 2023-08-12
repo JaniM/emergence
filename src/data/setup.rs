@@ -26,8 +26,6 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
         ) STRICT;
 
         CREATE UNIQUE INDEX IF NOT EXISTS notes_id_index ON notes (id);
-        CREATE INDEX IF NOT EXISTS notes_created_at_index ON notes (created_at);
-        CREATE INDEX IF NOT EXISTS notes_tasks_index ON notes(task_state ASC, created_at DESC);
 
 
         CREATE TABLE IF NOT EXISTS notes_subjects (
@@ -38,21 +36,27 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
 
         CREATE TABLE IF NOT EXISTS notes_search (
             rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-            note_id INTEGER NOT NULL,
+            note_id BLOB NOT NULL,
             subject_id BLOB NOT NULL,
             created_at INTEGER NOT NULL,
             task_state INTEGER NOT NULL DEFAULT 0
         ) STRICT;
 
-        CREATE INDEX IF NOT EXISTS notes_search_index ON notes_search (subject_id, created_at);
-        CREATE INDEX IF NOT EXISTS notes_search_tasks_index ON notes_search (subject_id, task_state ASC, created_at DESC);
+        CREATE INDEX IF NOT EXISTS notes_search_created_at_index
+            ON notes_search (created_at);
+        CREATE INDEX IF NOT EXISTS notes_search_subject_index
+            ON notes_search (subject_id, created_at);
+        CREATE INDEX IF NOT EXISTS notes_search_tasks_index
+            ON notes_search (task_state ASC, created_at DESC);
+        CREATE INDEX IF NOT EXISTS notes_search_subject_tasks_index
+            ON notes_search (subject_id, task_state ASC, created_at DESC);
 
 
         CREATE TRIGGER IF NOT EXISTS notes_search_insert AFTER INSERT ON notes_subjects BEGIN
             INSERT INTO notes_search (
                 note_id, subject_id, task_state, created_at)
             VALUES (
-                (SELECT rowid FROM notes WHERE id = NEW.note_id),
+                NEW.note_id,
                 NEW.subject_id,
                 (SELECT task_state FROM notes WHERE id = NEW.note_id),
                 (SELECT created_at FROM notes WHERE id = NEW.note_id)
@@ -61,7 +65,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
 
         CREATE TRIGGER IF NOT EXISTS notes_search_delete AFTER DELETE ON notes_subjects BEGIN
             DELETE FROM notes_search
-            WHERE note_id = (SELECT rowid FROM notes WHERE id = OLD.note_id)
+            WHERE note_id = OLD.note_id
             AND subject_id = OLD.subject_id;
         END;
 
@@ -82,7 +86,7 @@ pub fn setup_tables(conn: &mut Connection) -> Result<()> {
             INSERT INTO notes_search (
                 note_id, subject_id, task_state, created_at)
             SELECT
-                (SELECT rowid FROM notes WHERE id = note_id),
+                note_id,
                 subject_id,
                 (SELECT task_state FROM notes WHERE id = note_id),
                 (SELECT created_at FROM notes WHERE id = note_id)

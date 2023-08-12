@@ -74,8 +74,6 @@ impl Store {
             )?
             .execute(params![id, name])?;
 
-        self.update_subject_sources();
-
         Ok(Rc::new(SubjectData {
             id: SubjectId(id),
             name,
@@ -88,8 +86,6 @@ impl Store {
             .borrow()
             .prepare("DELETE FROM subjects WHERE id = ?1")?
             .execute(params![subject.0])?;
-
-        self.update_subject_sources();
 
         Ok(())
     }
@@ -104,27 +100,19 @@ impl Store {
             .prepare_cached("UPDATE subjects SET parent_id = ?1 WHERE id = ?2")?
             .execute(params![parent, subject.0])?;
 
-        self.update_subject_sources();
-
         Ok(())
     }
 
-    pub fn get_subject_children(&self, subject: SubjectId) -> rusqlite::Result<Vec<Subject>> {
+    pub fn get_subject_children(&self, subject: SubjectId) -> rusqlite::Result<Vec<SubjectId>> {
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, name, parent_id
+            "SELECT id
             FROM subjects
             WHERE parent_id = ?1
             ORDER BY name ASC",
         )?;
         let subjects = stmt
-            .query_map(params![subject.0], |row| {
-                Ok(Rc::new(SubjectData {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    parent_id: row.get(2)?,
-                }))
-            })?
+            .query_map(params![subject.0], |row| Ok(row.get(0)?))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(subjects)
     }
@@ -132,8 +120,13 @@ impl Store {
     pub fn import_subject(&self, subject: &SubjectData) -> rusqlite::Result<()> {
         self.conn
             .borrow()
-            .prepare_cached("INSERT INTO subjects (id, name) VALUES (?1, ?2)")?
-            .execute(params![subject.id.0, subject.name])?;
+            .prepare_cached(
+                "
+                INSERT INTO subjects (id, name, parent_id)
+                VALUES (?1, ?2, ?3)
+                ",
+            )?
+            .execute(params![subject.id.0, subject.name, subject.parent_id])?;
         Ok(())
     }
 

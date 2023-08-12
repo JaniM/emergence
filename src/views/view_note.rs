@@ -1,12 +1,12 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
     notes::{Note, TaskState},
-    query::{use_store, use_subject_query},
     subjects::{Subject, SubjectId},
 };
-use tracing::debug;
 
-use crate::views::{confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote};
+use crate::views::{
+    confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote, ViewState,
+};
 
 #[derive(Props)]
 pub struct ViewNoteProps<'a> {
@@ -25,7 +25,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         ConfirmDelete,
     }
 
-    let store = use_store(cx);
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let state = use_state(cx, || State::Normal);
 
@@ -41,7 +41,6 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     let on_mousedown = {
         let state = state.clone();
         move |e: MouseEvent| {
-            debug!("Clicked: {:?}", e.trigger_button());
             if e.trigger_button() != Some(MouseButton::Secondary) {
                 return;
             }
@@ -57,7 +56,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     let actually_delete = {
         let note = note.clone();
         move |_| {
-            store.read().delete_note(note.id).unwrap();
+            view_state.write().layer.delete_note_by_id(note.id);
         }
     };
 
@@ -69,8 +68,10 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 TaskState::Todo => TaskState::NotATask,
                 TaskState::Done => TaskState::NotATask,
             };
-            let new_note = note.with_task_state(new_state).to_note();
-            store.read().update_note(new_note).unwrap();
+            view_state
+                .write()
+                .layer
+                .edit_note_with(note.id, |note| note.task_state = new_state);
             state.set(State::Normal);
         }
     };
@@ -80,8 +81,9 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         DropdownAction::Delete => state.set(State::ConfirmDelete),
         DropdownAction::MakeTask => make_task(()),
         DropdownAction::Bump => {
-            let new_note = note.with_created_at(chrono::Local::now()).to_note();
-            store.read().update_note(new_note).unwrap();
+            view_state.write().layer.edit_note_with(note.id, |note| {
+                note.created_at = chrono::Local::now();
+            });
             state.set(State::Normal);
         }
     };
@@ -111,9 +113,10 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "task-button todo",
                 onclick: |_| {
-                    let mut new_note = cx.props.note.with_task_state(TaskState::Done);
-                    new_note.done_at = Some(chrono::Local::now());
-                    store.read().update_note(new_note.to_note()).unwrap();
+                    view_state.write().layer.edit_note_with(cx.props.note.id, |note| {
+                        note.task_state = TaskState::Done;
+                        note.done_at = Some(chrono::Local::now());
+                    });
                 },
                 title: "TODO"
             }
@@ -122,8 +125,10 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "task-button done",
                 onclick: |_| {
-                    let new_note = cx.props.note.with_task_state(TaskState::Todo).to_note();
-                    store.read().update_note(new_note).unwrap();
+                    view_state.write().layer.edit_note_with(cx.props.note.id, |note| {
+                        note.task_state = TaskState::Todo;
+                        note.done_at = None;
+                    });
                 },
                 title: "DONE"
             }
@@ -273,7 +278,9 @@ pub struct SubjectCardsProps<'a> {
 }
 
 pub fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
-    let subjects = use_subject_query(cx).subjects();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let subjects = view_state.read().layer.get_subjects();
+
     let mut cards = cx
         .props
         .sids

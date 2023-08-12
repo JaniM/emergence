@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use dioxus_desktop::use_eval;
 use sir::{css, global_css};
 
 #[derive(Props)]
@@ -43,7 +42,7 @@ pub fn ScrollTo<'a>(cx: Scope<'a, ScrollToProps<'a>>) -> Element<'a> {
         div {
             class: "{style} scroll-to",
             onmounted: move |_| {
-                js_eval(js.to_string());
+                js_eval(js).unwrap();
             },
             &cx.props.children
         }

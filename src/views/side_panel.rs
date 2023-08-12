@@ -1,8 +1,5 @@
 use dioxus::prelude::*;
-use emergence::data::{
-    query::{use_store, use_store_event_query, use_subject_query},
-    subjects::{Subject, SubjectId},
-};
+use emergence::data::subjects::{Subject, SubjectId};
 use sir::css;
 
 use crate::views::{select_subject::SelectSubject, view_note::ViewNote};
@@ -46,12 +43,11 @@ impl SidePanelState {
 
 pub fn SidePanel(cx: Scope) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let subjects = use_subject_query(cx).subjects();
+    let subjects = view_state.read().layer.get_subjects();
 
     let view_state_read = view_state.read();
     let ViewState {
-        selected_subject,
-        ..
+        selected_subject, ..
     } = &*view_state_read;
 
     let subject_name = selected_subject
@@ -95,7 +91,8 @@ pub fn SidePanel(cx: Scope) -> Element {
     "
     );
 
-    let header = css!("
+    let header = css!(
+        "
         padding: 10px;
         display: flex;
         flex-direction: column;
@@ -123,7 +120,8 @@ pub fn SidePanel(cx: Scope) -> Element {
                 }
             }
         }
-    ");
+    "
+    );
 
     let show_subject_select = use_state(cx, || false);
 
@@ -179,14 +177,13 @@ pub fn SidePanel(cx: Scope) -> Element {
 fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
-    let subjects = use_subject_query(cx).subjects();
+    let subjects = view_state.read().layer.get_subjects();
     let my_subject = subjects.get(&subject_id).unwrap().clone();
 
-    let store = use_store(cx);
-    let children = store
+    let children = view_state
         .read()
+        .layer
         .get_subject_children(*subject_id)
-        .unwrap()
         .into_iter()
         .map(|subject| {
             rsx! {
@@ -204,10 +201,10 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
 
     let show_parent_select = use_state(cx, || false);
     let set_parent = move |parent: Option<SubjectId>| {
-        store
-            .read()
+        view_state
+            .write()
+            .layer
             .set_subject_parent(*subject_id, parent)
-            .unwrap();
     };
 
     let style = css!(
@@ -255,7 +252,6 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
                     "Parent:"
                 }
                 div {
-                    key: "{parent.id.0}",
                     class: "subject-card",
                     onclick: move |_| {
                         view_state.write().go_to_subject(parent.id);
@@ -283,7 +279,6 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
                     "Parent:"
                 }
                 div {
-                    key: "{parent.id.0}",
                     class: "subject-card",
                     onclick: move |_| {
                         show_parent_select.set(true);
@@ -327,12 +322,13 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
 
 #[inline_props]
 fn FindSimilar(cx: Scope, text: String) -> Element {
-    let search = use_store(cx).read().search.clone();
+    let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
-    let counter = use_store_event_query(cx).count();
+    let counter = view_state.read().layer.event_count();
 
-    let similar = use_future(cx, (text, &counter), |(text, _)| async move {
-        search.find_similar(text.clone()).await
+    let similar = use_future(cx, (text, &counter), |(text, _)| {
+        let search = view_state.read().layer.search();
+        async move { search.find_similar(text).await }
     });
 
     let notes = similar.value()?;

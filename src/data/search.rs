@@ -292,7 +292,7 @@ fn tantivy_find_notes(
 
     let db_queey = format!(
         "SELECT {} FROM notes n WHERE rowid = ?",
-        notes::NOTE_COLUMNS
+        notes::SINGLE_NOTE_COLUMNS
     );
     let mut stmt = conn.prepare_cached(&db_queey).unwrap();
 
