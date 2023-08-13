@@ -12,6 +12,7 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
+use emergence::data::layer::use_layer_provider;
 use sir::AppStyle;
 use tracing::{info, metadata::LevelFilter};
 
@@ -167,11 +168,8 @@ struct AppProps {
 }
 
 fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
-    use_shared_state_provider(cx, || {
-        let store = Store::new(data::ConnectionType::File(cx.props.db_file.clone()));
-        let layer = data::layer::Layer::new(store);
-        ViewState::new(layer)
-    });
+    use_layer_provider(cx, data::ConnectionType::File(cx.props.db_file.clone()));
+    use_shared_state_provider(cx, || ViewState::new());
 
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
     let window = use_window(cx);

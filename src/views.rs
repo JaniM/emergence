@@ -21,11 +21,10 @@ pub struct ViewState {
     pub scroll_to_note: Option<NoteId>,
     pub selected_subject: Option<SubjectId>,
     pub side_panel: SidePanelState,
-    pub layer: emergence::data::layer::Layer,
 }
 
 impl ViewState {
-    pub fn new(layer: emergence::data::layer::Layer) -> Self {
+    pub fn new() -> Self {
         Self {
             show_input: false,
             show_search: false,
@@ -34,7 +33,6 @@ impl ViewState {
             scroll_to_note: None,
             selected_subject: None,
             side_panel: SidePanelState::Nothing,
-            layer,
         }
     }
 

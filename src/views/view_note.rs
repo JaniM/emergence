@@ -1,5 +1,6 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
+    layer::{use_layer, use_subject_layer},
     notes::{Note, TaskState},
     subjects::{Subject, SubjectId},
 };
@@ -8,15 +9,21 @@ use crate::views::{
     confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote, ViewState,
 };
 
-#[derive(Props)]
-pub struct ViewNoteProps<'a> {
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum OnSubjectSelect {
+    Switch,
+    Ignore,
+}
+
+#[derive(Props, PartialEq)]
+pub struct ViewNoteProps {
     note: Note,
-    on_select_subject: EventHandler<'a, Subject>,
+    subject_select: OnSubjectSelect,
     #[props(!optional)]
     hide_subject: Option<SubjectId>,
 }
 
-pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
+pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
     #[derive(Clone, Copy, PartialEq)]
     enum State {
         Normal,
@@ -25,6 +32,8 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         ConfirmDelete,
     }
 
+    let layer = use_layer(cx);
+    // TODO: Make this write-obnly whwn that is implemented in dioxus
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let state = use_state(cx, || State::Normal);
@@ -56,7 +65,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
     let actually_delete = {
         let note = note.clone();
         move |_| {
-            view_state.write().layer.delete_note_by_id(note.id);
+            layer.write().delete_note_by_id(note.id);
         }
     };
 
@@ -68,9 +77,8 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 TaskState::Todo => TaskState::NotATask,
                 TaskState::Done => TaskState::NotATask,
             };
-            view_state
+            layer
                 .write()
-                .layer
                 .edit_note_with(note.id, |note| note.task_state = new_state);
             state.set(State::Normal);
         }
@@ -81,7 +89,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         DropdownAction::Delete => state.set(State::ConfirmDelete),
         DropdownAction::MakeTask => make_task(()),
         DropdownAction::Bump => {
-            view_state.write().layer.edit_note_with(note.id, |note| {
+            layer.write().edit_note_with(note.id, |note| {
                 note.created_at = chrono::Local::now();
             });
             state.set(State::Normal);
@@ -113,7 +121,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "task-button todo",
                 onclick: |_| {
-                    view_state.write().layer.edit_note_with(cx.props.note.id, |note| {
+                    layer.write().edit_note_with(cx.props.note.id, |note| {
                         note.task_state = TaskState::Done;
                         note.done_at = Some(chrono::Local::now());
                     });
@@ -125,7 +133,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
             div {
                 class: "task-button done",
                 onclick: |_| {
-                    view_state.write().layer.edit_note_with(cx.props.note.id, |note| {
+                    layer.write().edit_note_with(cx.props.note.id, |note| {
                         note.task_state = TaskState::Todo;
                         note.done_at = None;
                     });
@@ -178,6 +186,13 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
         .filter(|s| Some(*s) != cx.props.hide_subject)
         .collect();
 
+    let on_click_subject = move |subject: Subject| match cx.props.subject_select {
+        OnSubjectSelect::Switch => {
+            view_state.write().go_to_note(note.id, subject.id);
+        }
+        OnSubjectSelect::Ignore => {}
+    };
+
     let content = if *state.get() == State::Edit {
         rsx! {
             EditNote {
@@ -191,9 +206,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps<'a>>) -> Element<'a> {
                 class: "note-row",
                 SubjectCards {
                     sids: subjects,
-                    on_click_subject: |subject: Subject| {
-                        cx.props.on_select_subject.call(subject);
-                    },
+                    on_click_subject: on_click_subject,
                 },
                 task_button,
                 div {
@@ -278,8 +291,8 @@ pub struct SubjectCardsProps<'a> {
 }
 
 pub fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let subjects = view_state.read().layer.get_subjects();
+    let layer = use_subject_layer(cx);
+    let subjects = layer.read().get_subjects();
 
     let mut cards = cx
         .props

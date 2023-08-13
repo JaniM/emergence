@@ -1,9 +1,14 @@
-use crate::{
-    data::subjects::Subject,
-    views::{note_input::CreateNote, scroll_to::ScrollTo, view_note::ViewNote, ViewState},
+use crate::views::{
+    note_input::CreateNote,
+    scroll_to::ScrollTo,
+    view_note::{OnSubjectSelect, ViewNote},
+    ViewState,
 };
 use dioxus::prelude::*;
-use emergence::data::notes::{Note, NoteSearch, TaskState};
+use emergence::data::{
+    layer::use_layer,
+    notes::{Note, NoteSearch, TaskState},
+};
 use std::collections::BTreeMap;
 
 type NoteGroup<T> = (chrono::NaiveDate, String, Vec<T>);
@@ -37,6 +42,7 @@ fn reverse_groups<T>(groups: &mut [NoteGroup<T>]) {
 
 pub fn ListNotes(cx: Scope) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_layer(cx).read();
 
     let ViewState {
         tasks_only,
@@ -51,7 +57,7 @@ pub fn ListNotes(cx: Scope) -> Element {
         subject_id: *selected_subject,
         task_only: *tasks_only,
     };
-    let query = view_state.read().layer.get_notes_for_search(search);
+    let query = layer.get_notes_for_search(search);
 
     let mut groups = if !*tasks_only {
         group_by_date(&query)
@@ -100,9 +106,7 @@ pub fn ListNotes(cx: Scope) -> Element {
                                 key: "{note.id.0}",
                                 note: note.clone(),
                                 hide_subject: *selected_subject,
-                                on_select_subject: move |subject: Subject| {
-                                    view_state.write().go_to_note(id, subject.id);
-                                },
+                                subject_select: OnSubjectSelect::Switch
                             } },
                         )
                     })
@@ -211,12 +215,12 @@ pub fn ListNotes(cx: Scope) -> Element {
 
 #[inline_props]
 pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_layer(cx).read();
 
-    let event_count = view_state.read().layer.event_count();
+    let event_count = layer.event_count();
     let query_fut = use_future(cx, (search_text, &event_count), move |(search_text, _)| {
         let search_text = search_text.trim().to_string();
-        let search = view_state.read().layer.search();
+        let search = layer.search();
         async move { search.perform_search(search_text).await }
     });
     let query = match query_fut.value() {
@@ -239,12 +243,7 @@ pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
                             key: "{note.id.0}",
                             note: note.clone(),
                             hide_subject: None,
-                            on_select_subject: move |subject: Subject| {
-                                view_state.write().go_to_note(
-                                    note.id,
-                                    subject.id,
-                                );
-                            },
+                            subject_select: OnSubjectSelect::Switch,
                         } }
                     })
                     .collect::<Vec<_>>(),

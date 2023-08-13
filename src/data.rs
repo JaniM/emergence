@@ -129,7 +129,7 @@ mod test {
 
     #[test]
     fn test_note_query_by_subject() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
@@ -163,7 +163,7 @@ mod test {
 
     #[test]
     fn test_subject_query() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         store.add_subject("Test subject 1".to_string())?;
         store.add_subject("Test subject 2".to_string())?;
 
@@ -178,7 +178,7 @@ mod test {
     #[test]
     #[ignore = "TODO"]
     fn cant_add_duplicate_subject() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let name = "Test subject 1".to_string();
         store.add_subject(name.clone())?;
         assert!(store.add_subject(name).is_err());
@@ -187,7 +187,7 @@ mod test {
 
     #[test]
     fn test_edit_note() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
@@ -236,7 +236,7 @@ mod test {
 
     #[test]
     fn test_delete_note() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
@@ -278,7 +278,7 @@ mod test {
 
     #[test]
     fn test_tasks() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
@@ -327,7 +327,7 @@ mod test {
 
     #[test]
     fn test_delete_subject() -> Result<()> {
-        let mut store = Store::new(ConnectionType::InMemory);
+        let store = Store::new(ConnectionType::InMemory);
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 

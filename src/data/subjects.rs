@@ -63,7 +63,7 @@ impl Store {
     }
 
     #[instrument(skip(self))]
-    pub fn add_subject(&mut self, name: String) -> rusqlite::Result<Subject> {
+    pub fn add_subject(&self, name: String) -> rusqlite::Result<Subject> {
         debug!("Adding subject");
         let id = Uuid::new_v4();
         self.conn

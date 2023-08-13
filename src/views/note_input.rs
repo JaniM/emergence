@@ -8,7 +8,7 @@ use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use emergence::data::notes::{Note, NoteBuilder, TaskState};
+use emergence::data::{notes::{Note, NoteBuilder, TaskState}, layer::use_layer};
 
 #[derive(Props)]
 pub struct CreateNoteProps<'a> {
@@ -20,7 +20,7 @@ pub struct CreateNoteProps<'a> {
 }
 
 pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_layer(cx);
 
     let on_create_note = |(text, subjects): (String, Vec<SubjectId>)| {
         if !text.is_empty() {
@@ -31,7 +31,7 @@ pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
                 } else {
                     TaskState::NotATask
                 });
-            view_state.write().layer.create_note(note);
+            layer.write().create_note(note);
         }
         cx.props.on_create_note.call(text);
     };
@@ -52,7 +52,7 @@ pub struct EditNoteProps<'a> {
 }
 
 pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_layer(cx);
     let note_id = cx.props.note.id;
 
     let on_done = move |_| {
@@ -60,7 +60,7 @@ pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
     };
 
     let on_create_note = move |(text, subjects): (String, Vec<SubjectId>)| {
-        view_state.write().layer.edit_note_with(note_id, |note| {
+        layer.write().edit_note_with(note_id, |note| {
             note.text = text;
             note.subjects = subjects;
         });

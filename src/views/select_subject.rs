@@ -4,9 +4,8 @@ use std::rc::Rc;
 use crate::data::subjects::{Subject, SubjectId};
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
+use emergence::data::layer::use_subject_layer;
 use sir::css;
-
-use super::ViewState;
 
 const FOLDER_ICON: &'static str = "▼";
 
@@ -20,10 +19,10 @@ pub struct Props<'a> {
 }
 
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_subject_layer(cx);
     let search = use_state(cx, String::new);
 
-    let all_subjects = view_state.read().layer.get_subjects();
+    let all_subjects = layer.read().get_subjects();
 
     // TODO: Add semantic sorting
     let filtered_subjects = use_memo(
@@ -54,7 +53,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
                     Some(subject) if subject.name.to_lowercase() == search.to_lowercase() => {
                         subject.clone()
                     }
-                    _ => view_state.write().layer.create_subject(search.clone()),
+                    _ => layer.write().create_subject(search.clone()),
                 };
                 cx.props.on_select.call(subject);
             }

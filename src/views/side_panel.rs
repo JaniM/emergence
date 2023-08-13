@@ -1,8 +1,14 @@
 use dioxus::prelude::*;
-use emergence::data::subjects::{Subject, SubjectId};
+use emergence::data::{
+    layer::{use_layer, use_subject_layer},
+    subjects::{Subject, SubjectId},
+};
 use sir::css;
 
-use crate::views::{select_subject::SelectSubject, view_note::ViewNote};
+use crate::views::{
+    select_subject::SelectSubject,
+    view_note::{OnSubjectSelect, ViewNote},
+};
 
 use super::ViewState;
 
@@ -43,7 +49,8 @@ impl SidePanelState {
 
 pub fn SidePanel(cx: Scope) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let subjects = view_state.read().layer.get_subjects();
+    let layer = use_subject_layer(cx);
+    let subjects = layer.read().get_subjects();
 
     let view_state_read = view_state.read();
     let ViewState {
@@ -176,13 +183,13 @@ pub fn SidePanel(cx: Scope) -> Element {
 #[inline_props]
 fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_subject_layer(cx);
 
-    let subjects = view_state.read().layer.get_subjects();
+    let subjects = layer.read().get_subjects();
     let my_subject = subjects.get(&subject_id).unwrap().clone();
 
-    let children = view_state
+    let children = layer
         .read()
-        .layer
         .get_subject_children(*subject_id)
         .into_iter()
         .map(|subject| {
@@ -200,12 +207,8 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
         .collect::<Vec<_>>();
 
     let show_parent_select = use_state(cx, || false);
-    let set_parent = move |parent: Option<SubjectId>| {
-        view_state
-            .write()
-            .layer
-            .set_subject_parent(*subject_id, parent)
-    };
+    let set_parent =
+        move |parent: Option<SubjectId>| layer.write().set_subject_parent(*subject_id, parent);
 
     let style = css!(
         "
@@ -322,12 +325,12 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
 
 #[inline_props]
 fn FindSimilar(cx: Scope, text: String) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let layer = use_layer(cx);
 
-    let counter = view_state.read().layer.event_count();
+    let counter = layer.read().event_count();
 
     let similar = use_future(cx, (text, &counter), |(text, _)| {
-        let search = view_state.read().layer.search();
+        let search = layer.read().search();
         async move { search.find_similar(text).await }
     });
 
@@ -365,7 +368,7 @@ fn FindSimilar(cx: Scope, text: String) -> Element {
                     ViewNote {
                         key: "{note.id.0}",
                         note: note.clone(),
-                        on_select_subject: |_| {},
+                        subject_select: OnSubjectSelect::Ignore,
                         hide_subject: None,
                     }
                 }

@@ -4,9 +4,15 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::hash::Hash;
 use std::rc::Rc;
 
+use dioxus::prelude::{
+    use_shared_state, use_shared_state_provider, 
+    UseSharedState, ScopeState,
+};
+
 use super::notes::{NoteBuilder, NoteData, NoteSearch};
 use super::search::SearchWorker;
 use super::subjects::{Subject, SubjectId};
+use super::ConnectionType;
 use super::{
     notes::{Note, NoteId},
     Store,
@@ -88,71 +94,20 @@ where
 /// Layer provides an abstraction layer over the store to provide a
 /// consistent interface for the rest of the application.
 pub struct Layer {
-    store: Store,
+    store: Rc<Store>,
     note_cache: RefCell<Cache<NoteId, Note>>,
     query_cache: RefCell<Cache<NoteSearch, Vec<NoteId>>>,
-    subjects: RefCell<Option<Rc<BTreeMap<SubjectId, Subject>>>>,
-    subject_children: RefCell<Cache<SubjectId, Vec<SubjectId>>>,
     event_count: usize,
 }
 
 impl Layer {
-    pub fn new(store: Store) -> Self {
+    pub fn new(store: Rc<Store>) -> Self {
         Self {
             store,
             note_cache: RefCell::new(Cache::new(1024)),
             query_cache: RefCell::new(Cache::new(16)),
-            subjects: Default::default(),
-            subject_children: RefCell::new(Cache::new(16)),
             event_count: 0,
         }
-    }
-
-    fn invalidate_subjects(&mut self) {
-        *self.subjects.borrow_mut() = None;
-        self.subject_children.borrow_mut().clear();
-    }
-
-    pub fn get_subjects(&self) -> Rc<BTreeMap<SubjectId, Subject>> {
-        let mut subjects = self.subjects.borrow_mut();
-        if subjects.is_none() {
-            let subject_list = self.store.get_subjects().unwrap();
-            let map = subject_list
-                .iter()
-                .map(|s| (s.id, s.clone()))
-                .collect::<BTreeMap<_, _>>();
-            *subjects = Some(Rc::new(map));
-        }
-
-        subjects.as_ref().unwrap().clone()
-    }
-
-    pub fn create_subject(&mut self, name: String) -> Subject {
-        self.event();
-        self.invalidate_subjects();
-        let subject = self.store.add_subject(name).unwrap();
-        subject
-    }
-
-    pub fn set_subject_parent(&mut self, subject: SubjectId, parent: Option<SubjectId>) {
-        self.event();
-        self.invalidate_subjects();
-        self.store.set_subject_parent(subject, parent).unwrap();
-    }
-
-    pub fn get_subject_children(&self, subject: SubjectId) -> Vec<Subject> {
-        self.subject_children
-            .borrow_mut()
-            .get_or_insert_with(subject, || {
-                self.store.get_subject_children(subject).unwrap()
-            })
-            .iter()
-            .map(|id| self.get_subject_by_id(*id))
-            .collect()
-    }
-
-    pub fn get_subject_by_id(&self, id: SubjectId) -> Subject {
-        self.get_subjects().get(&id).unwrap().clone()
     }
 
     pub fn create_note(&mut self, builder: NoteBuilder) -> Note {
@@ -220,4 +175,83 @@ impl Layer {
     pub fn event_count(&self) -> usize {
         self.event_count
     }
+}
+
+pub struct SubjectLayer {
+    store: Rc<Store>,
+    subjects: RefCell<Option<Rc<BTreeMap<SubjectId, Subject>>>>,
+    subject_children: RefCell<Cache<SubjectId, Vec<SubjectId>>>,
+}
+
+impl SubjectLayer {
+    pub fn new(store: Rc<Store>) -> Self {
+        Self {
+            store,
+            subjects: Default::default(),
+            subject_children: RefCell::new(Cache::new(16)),
+        }
+    }
+
+    fn invalidate_subjects(&mut self) {
+        *self.subjects.borrow_mut() = None;
+        self.subject_children.borrow_mut().clear();
+    }
+
+    pub fn get_subjects(&self) -> Rc<BTreeMap<SubjectId, Subject>> {
+        let mut subjects = self.subjects.borrow_mut();
+        if subjects.is_none() {
+            let subject_list = self.store.get_subjects().unwrap();
+            let map = subject_list
+                .iter()
+                .map(|s| (s.id, s.clone()))
+                .collect::<BTreeMap<_, _>>();
+            *subjects = Some(Rc::new(map));
+        }
+
+        subjects.as_ref().unwrap().clone()
+    }
+
+    pub fn create_subject(&mut self, name: String) -> Subject {
+        self.invalidate_subjects();
+        let subject = self.store.add_subject(name).unwrap();
+        subject
+    }
+
+    pub fn set_subject_parent(&mut self, subject: SubjectId, parent: Option<SubjectId>) {
+        self.invalidate_subjects();
+        self.store.set_subject_parent(subject, parent).unwrap();
+    }
+
+    pub fn get_subject_children(&self, subject: SubjectId) -> Vec<Subject> {
+        self.subject_children
+            .borrow_mut()
+            .get_or_insert_with(subject, || {
+                self.store.get_subject_children(subject).unwrap()
+            })
+            .iter()
+            .map(|id| self.get_subject_by_id(*id))
+            .collect()
+    }
+
+    pub fn get_subject_by_id(&self, id: SubjectId) -> Subject {
+        self.get_subjects().get(&id).unwrap().clone()
+    }
+}
+
+pub fn use_layer_provider(cx: &ScopeState, conn: ConnectionType) -> &UseSharedState<Layer> {
+    use_shared_state_provider(cx, || {
+        let store = Store::new(conn);
+        Layer::new(Rc::new(store))
+    });
+    let layer = use_shared_state::<Layer>(cx).unwrap();
+    use_shared_state_provider(cx, || SubjectLayer::new(layer.read().store.clone()));
+    layer
+}
+
+pub fn use_layer(cx: &ScopeState) -> &UseSharedState<Layer> {
+    use_shared_state(cx).unwrap()
+}
+
+pub fn use_subject_layer(cx: &ScopeState) -> &UseSharedState<SubjectLayer> {
+    use_shared_state(cx).unwrap()
 }
