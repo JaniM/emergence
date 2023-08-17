@@ -33,7 +33,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
     }
 
     let layer = use_layer(cx);
-    // TODO: Make this write-obnly whwn that is implemented in dioxus
+    // TODO: Make this write-only whwn that is implemented in dioxus
     let view_state = use_shared_state::<ViewState>(cx).unwrap();
 
     let state = use_state(cx, || State::Normal);

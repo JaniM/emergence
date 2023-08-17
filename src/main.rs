@@ -141,10 +141,7 @@ fn main() {
 
     info!("Starting app");
 
-    #[cfg(not(debug_assertions))]
-    let disable_context_menu = true;
-    #[cfg(debug_assertions)]
-    let disable_context_menu = false;
+    let disable_context_menu = !cfg!(debug_assertions);
 
     // launch the dioxus app in a webview
     dioxus_desktop::launch_with_props(

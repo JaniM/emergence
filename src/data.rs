@@ -1,12 +1,12 @@
 pub mod explain;
 pub mod export;
 mod functions;
+pub mod layer;
 pub mod notes;
 pub mod search;
 mod setup;
 pub mod subjects;
 pub mod tfidf;
-pub mod layer;
 
 use rusqlite::{params, Connection, Result};
 use std::path::PathBuf;
@@ -79,6 +79,7 @@ impl Drop for Store {
             "#,
             )
             .unwrap();
+        // TODO: Gracefully close the search thread.
     }
 }
 

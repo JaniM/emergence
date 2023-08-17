@@ -1,9 +1,8 @@
 use rusqlite::Connection;
-use std::sync::Arc;
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use tantivy::query::QueryParserError;
 use tantivy::tokenizer::TextAnalyzer;
-use tokio::sync::mpsc::{error::TryRecvError, unbounded_channel, UnboundedSender};
 use tokio::sync::oneshot;
 
 use crate::data::tfidf;
@@ -15,9 +14,44 @@ use super::{
     ConnectionType,
 };
 
+#[derive(Clone)]
 enum Query {
     Search(String),
     Similar(String),
+}
+
+struct Bridge<T> {
+    inner: Arc<(Mutex<Option<T>>, Condvar)>,
+}
+
+impl<T> Clone for Bridge<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
+}
+
+impl<T> Bridge<T> {
+    fn new() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+    fn send(&self, value: T) {
+        let mut guard = self.inner.0.lock().unwrap();
+        *guard = Some(value);
+        self.inner.1.notify_one();
+    }
+
+    fn wait(&self) -> T {
+        let mut guard = self
+            .inner
+            .1
+            .wait_while(self.inner.0.lock().unwrap(), |v| v.is_none())
+            .unwrap();
+        guard.take().unwrap()
+    }
 }
 
 struct SearchRequest {
@@ -27,7 +61,7 @@ struct SearchRequest {
 
 #[derive(Clone)]
 pub struct SearchWorker {
-    sender_to_worker: UnboundedSender<SearchRequest>,
+    bridge: Bridge<SearchRequest>,
 }
 
 impl SearchWorker {
@@ -38,53 +72,13 @@ impl SearchWorker {
         };
         add_functions(&conn).unwrap();
 
-        let (sender_to_worker, mut receiver_to_worker) = unbounded_channel::<SearchRequest>();
+        let bridge = Bridge::<SearchRequest>::new();
 
         let reader = index.reader().unwrap();
 
-        // Note: the handler is not allowed to crash, so unwrap is strictly forbidden.
-        let _handle = thread::spawn(move || loop {
-            // Skip requests if we have a backlog.
-            let mut current_request = None;
-            let request = loop {
-                match receiver_to_worker.try_recv() {
-                    Ok(request) => current_request = Some(request),
-                    Err(TryRecvError::Empty) => {
-                        if let Some(request) = current_request {
-                            break request;
-                        }
-                        current_request = match receiver_to_worker.blocking_recv() {
-                            Some(request) => Some(request),
-                            None => {
-                                tracing::info!("Search channel is dead, exiting");
-                                return;
-                            }
-                        }
-                    }
-                    Err(TryRecvError::Disconnected) => {
-                        tracing::info!("Search channel is dead, exiting");
-                        return;
-                    }
-                }
-            };
+        spawn_search(bridge.clone(), index, reader, conn);
 
-            let result = match request.query {
-                Query::Search(text) => search_text(&index, &reader, &conn, vec![text], 200),
-                Query::Similar(text) => find_similar(&index, &reader, &conn, &text),
-            };
-            let result = match result {
-                Ok(result) => result,
-                Err(e) => {
-                    // TODO: Tell the user that the search failed.
-                    tracing::error!("Failed to search for text: {}", e);
-                    Vec::new()
-                }
-            };
-
-            let _send_result = request.send_data_to.send(result);
-        });
-
-        SearchWorker { sender_to_worker }
+        SearchWorker { bridge }
     }
 
     pub async fn perform_search(&self, search_text: String) -> Vec<Note> {
@@ -101,11 +95,38 @@ impl SearchWorker {
             query,
             send_data_to: sender_to_main,
         };
-        self.sender_to_worker.send(query).unwrap();
+        self.bridge.send(query);
 
         let notes = receiver_to_main.await.unwrap();
         notes.into_iter().map(|n| n.to_note()).collect()
     }
+}
+
+fn spawn_search(
+    bridge: Bridge<SearchRequest>,
+    index: Arc<Index>,
+    reader: IndexReader,
+    conn: Connection,
+) {
+    // Note: the handler is not allowed to crash, so unwrap is strictly forbidden.
+    let _handle = thread::spawn(move || loop {
+        let request = bridge.wait();
+
+        let result = match request.query {
+            Query::Search(text) => search_text(&index, &reader, &conn, vec![text], 200),
+            Query::Similar(text) => find_similar(&index, &reader, &conn, &text),
+        };
+        let result = match result {
+            Ok(result) => result,
+            Err(e) => {
+                // TODO: Tell the user that the search failed.
+                tracing::error!("Failed to search for text: {}", e);
+                Vec::new()
+            }
+        };
+
+        let _send_result = request.send_data_to.send(result);
+    });
 }
 
 #[tracing::instrument(skip(index, reader, conn))]
