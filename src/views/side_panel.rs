@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use emergence::data::{
-    layer::{use_layer, use_subject_layer},
+    layer::{use_layer, use_subject_children, use_subjects},
     subjects::{Subject, SubjectId},
 };
 use sir::css;
@@ -10,7 +10,7 @@ use crate::views::{
     view_note::{OnSubjectSelect, ViewNote},
 };
 
-use super::ViewState;
+use super::{use_view_state, ViewState};
 
 #[derive(Default, Clone)]
 pub enum SidePanelState {
@@ -48,9 +48,9 @@ impl SidePanelState {
 }
 
 pub fn SidePanel(cx: Scope) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let layer = use_subject_layer(cx);
-    let subjects = layer.read().get_subjects();
+    let view_state = use_view_state(cx);
+    let subjects = use_subjects(cx);
+    let subjects = subjects.read();
 
     let view_state_read = view_state.read();
     let ViewState {
@@ -58,7 +58,7 @@ pub fn SidePanel(cx: Scope) -> Element {
     } = &*view_state_read;
 
     let subject_name = selected_subject
-        .and_then(|id| subjects.get(&id))
+        .and_then(|id| subjects.get(&id).clone())
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Journal".to_string());
 
@@ -182,17 +182,21 @@ pub fn SidePanel(cx: Scope) -> Element {
 
 #[inline_props]
 fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let layer = use_subject_layer(cx);
+    let view_state = use_view_state(cx);
+    let layer = use_layer(cx);
 
-    let subjects = layer.read().get_subjects();
+    let subjects = use_subjects(cx);
+    let subjects = subjects.read();
+    let subject_children = use_subject_children(cx);
+    let subject_children = subject_children.read();
     let my_subject = subjects.get(&subject_id).unwrap().clone();
 
-    let children = layer
-        .read()
-        .get_subject_children(*subject_id)
+    let children = subject_children
+        .get(subject_id)
         .into_iter()
-        .map(|subject| {
+        .flatten()
+        .map(|id| {
+            let subject = subjects.get(id).unwrap().clone();
             rsx! {
                 div {
                     key: "{subject.id.0}",

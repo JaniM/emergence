@@ -1,13 +1,14 @@
 use crate::views::{
     note_input::CreateNote,
     scroll_to::ScrollTo,
+    use_view_state,
     view_note::{OnSubjectSelect, ViewNote},
     ViewState,
 };
 use dioxus::prelude::*;
 use emergence::data::{
-    layer::use_layer,
-    notes::{Note, NoteSearch, TaskState},
+    layer::{use_layer, use_notes},
+    notes::{Note, TaskState},
 };
 use std::collections::BTreeMap;
 
@@ -41,8 +42,7 @@ fn reverse_groups<T>(groups: &mut [NoteGroup<T>]) {
 }
 
 pub fn ListNotes(cx: Scope) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
-    let layer = use_layer(cx).read();
+    let view_state = use_view_state(cx);
 
     let ViewState {
         tasks_only,
@@ -53,17 +53,14 @@ pub fn ListNotes(cx: Scope) -> Element {
     } = &*view_state.read();
 
     let subject_id_key = selected_subject.map_or_else(|| "none".to_string(), |id| id.0.to_string());
-    let search = NoteSearch {
-        subject_id: *selected_subject,
-        task_only: *tasks_only,
-    };
-    let query = layer.get_notes_for_search(search);
+    let query = use_notes(cx);
 
     let mut groups = if !*tasks_only {
-        group_by_date(&query)
+        group_by_date(&*query.read())
     } else {
         let mut done = vec![];
         let mut undone = vec![];
+        let query = query.read();
         let mut query = query.iter().peekable();
         while let Some(first) = query.peek() {
             let mut group = vec![];
@@ -160,7 +157,7 @@ pub fn ListNotes(cx: Scope) -> Element {
             button {
                 key: "add-note-button",
                 class: "add-note",
-                onclick: |_| view_state.write().start_note_input(),
+                onclick: move |_| view_state.write().start_note_input(),
                 "Add note"
             }
         }
@@ -215,12 +212,12 @@ pub fn ListNotes(cx: Scope) -> Element {
 
 #[inline_props]
 pub fn ListSearchResult(cx: Scope, search_text: String) -> Element {
-    let layer = use_layer(cx).read();
+    let layer = use_layer(cx);
 
-    let event_count = layer.event_count();
+    let event_count = layer.read().event_count();
     let query_fut = use_future(cx, (search_text, &event_count), move |(search_text, _)| {
         let search_text = search_text.trim().to_string();
-        let search = layer.search();
+        let search = layer.read().search();
         async move { search.perform_search(search_text).await }
     });
     let query = match query_fut.value() {

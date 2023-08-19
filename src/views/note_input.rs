@@ -2,13 +2,16 @@ use std::rc::Rc;
 
 use crate::{
     data::subjects::{Subject, SubjectId},
-    views::{select_subject::SelectSubject, view_note::SubjectCards, ViewState},
+    views::{select_subject::SelectSubject, use_view_state, view_note::SubjectCards},
 };
 use dioxus::{
     html::input_data::keyboard_types::{Key, Modifiers},
     prelude::*,
 };
-use emergence::data::{notes::{Note, NoteBuilder, TaskState}, layer::use_layer};
+use emergence::data::{
+    layer::use_layer,
+    notes::{Note, NoteBuilder, TaskState},
+};
 
 #[derive(Props)]
 pub struct CreateNoteProps<'a> {
@@ -123,9 +126,9 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     let show_subjects = use_state(cx, || ShowSubjects::No);
     let textarea = use_state(cx, || None::<Rc<MountedData>>);
 
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let view_state = use_view_state(cx);
 
-    let cleanup = || {
+    let cleanup = move || {
         view_state.write().side_panel.back();
     };
 

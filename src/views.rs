@@ -9,11 +9,18 @@ pub mod select_subject;
 pub mod side_panel;
 pub mod view_note;
 
-use emergence::data::{notes::NoteId, subjects::SubjectId};
+use dioxus::prelude::{use_context, ScopeState};
+use dioxus_signals::Signal;
+use emergence::data::{
+    layer::Layer,
+    notes::{NoteId, NoteSearch},
+    subjects::SubjectId,
+};
 
 use self::side_panel::SidePanelState;
 
 pub struct ViewState {
+    pub layer: Signal<Layer>,
     pub show_input: bool,
     pub show_search: bool,
     pub search_text: String,
@@ -24,8 +31,9 @@ pub struct ViewState {
 }
 
 impl ViewState {
-    pub fn new() -> Self {
+    pub fn new(layer: Signal<Layer>) -> Self {
         Self {
+            layer,
             show_input: false,
             show_search: false,
             search_text: String::new(),
@@ -41,11 +49,19 @@ impl ViewState {
         self.scroll_to_note = None;
         self.side_panel = SidePanelState::SubjectDetails(subject);
         self.show_search = false;
+        self.update_notes();
     }
 
     pub fn go_to_note(&mut self, note: NoteId, subject: SubjectId) {
         self.go_to_subject(subject);
         self.scroll_to_note = Some(note);
+    }
+
+    fn update_notes(&self) {
+        self.layer.write().set_search(NoteSearch {
+            subject_id: self.selected_subject,
+            task_only: self.tasks_only,
+        })
     }
 
     pub fn show_search(&mut self) {
@@ -56,17 +72,20 @@ impl ViewState {
     pub fn show_tasks_only(&mut self) {
         self.tasks_only = true;
         self.show_search = false;
+        self.update_notes();
     }
 
     pub fn show_notes_only(&mut self) {
         self.tasks_only = false;
         self.show_search = false;
+        self.update_notes();
     }
 
     pub fn go_to_journal(&mut self) {
         self.selected_subject = None;
         self.scroll_to_note = None;
         self.side_panel = SidePanelState::Nothing;
+        self.update_notes();
     }
 
     pub fn start_note_input(&mut self) {
@@ -83,4 +102,8 @@ impl ViewState {
     pub fn set_search_text(&mut self, text: String) {
         self.search_text = text;
     }
+}
+
+pub fn use_view_state(cx: &ScopeState) -> Signal<ViewState> {
+    *use_context(cx).expect("Layer should be provided")
 }

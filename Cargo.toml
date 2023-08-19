@@ -11,9 +11,9 @@ chrono = { version = "0.4.26", features = ["serde"] }
 clap = { version = "4.3.11", features = ["derive"] }
 const_format = "0.2.31"
 
-# using master branch for global hotkeys
-dioxus = "0.4.0"
-dioxus-desktop = "0.4.0"
+dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "f652474a6e163a1ce543d83da02367cbfd88a193" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "f652474a6e163a1ce543d83da02367cbfd88a193" }
+dioxus-signals = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "f652474a6e163a1ce543d83da02367cbfd88a193" }
 
 rusqlite = { version = "0.29.0", features = ["bundled", "chrono", "functions", "uuid"] }
 smallvec = "1.11.0"
@@ -30,8 +30,12 @@ lipsum = "0.9.0"
 rand = "0.8.5"
 itertools = "0.11.0"
 tantivy = "0.20.2"
-sir = { git = "https://gitlab.com/seequ/sir.git", features = ["dioxus"] }
+sir = { version = "0.4.0", features = ["dioxus"] }
 ahash = "0.8.3"
+
+[patch.crates-io]
+dioxus = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "f652474a6e163a1ce543d83da02367cbfd88a193" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus.git", rev = "f652474a6e163a1ce543d83da02367cbfd88a193" }
 
 [dev-dependencies]
 criterion = "0.4"

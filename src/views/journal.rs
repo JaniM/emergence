@@ -1,10 +1,10 @@
 use dioxus::prelude::*;
 use sir::css;
 
-use crate::views::{list_notes::ListNotes, search_view::Search, ViewState};
+use crate::views::{list_notes::ListNotes, search_view::Search, use_view_state, ViewState};
 
 pub fn Journal(cx: Scope) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let view_state = use_view_state(cx);
 
     let ViewState { show_search, .. } = &*view_state.read();
 
@@ -45,7 +45,7 @@ pub fn Journal(cx: Scope) -> Element {
 }
 
 fn Tabs(cx: Scope) -> Element {
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let view_state = use_view_state(cx);
 
     let ViewState {
         tasks_only,
@@ -98,21 +98,21 @@ fn Tabs(cx: Scope) -> Element {
             class: "{style}",
             div {
                 class: tab_class(notes_obly),
-                onclick: |_| {
+                onclick: move |_| {
                     view_state.write().show_notes_only();
                 },
                 "Notes"
             }
             div {
                 class: tab_class(*tasks_only),
-                onclick: |_| {
+                onclick: move |_| {
                     view_state.write().show_tasks_only();
                 },
                 "Tasks"
             }
             div {
                 class: tab_class(*show_search),
-                onclick: |_| {
+                onclick: move |_| {
                     view_state.write().show_search();
                 },
                 "Search"

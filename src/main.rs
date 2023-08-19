@@ -5,6 +5,7 @@ mod views;
 use std::path::PathBuf;
 
 use dioxus_desktop::use_window;
+use dioxus_signals::*;
 pub use emergence::data;
 
 use data::Store;
@@ -165,10 +166,9 @@ struct AppProps {
 }
 
 fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
-    use_layer_provider(cx, data::ConnectionType::File(cx.props.db_file.clone()));
-    use_shared_state_provider(cx, || ViewState::new());
+    let layer = use_layer_provider(cx, data::ConnectionType::File(cx.props.db_file.clone()));
+    let view_state = *use_context_provider(cx, || Signal::new(ViewState::new(layer)));
 
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
     let window = use_window(cx);
     let zoom_level = use_state(cx, || 100);
 

@@ -4,7 +4,7 @@ use std::rc::Rc;
 use crate::data::subjects::{Subject, SubjectId};
 use dioxus::html::input_data::keyboard_types::Key;
 use dioxus::prelude::*;
-use emergence::data::layer::use_subject_layer;
+use emergence::data::layer::{use_layer, use_subjects};
 use sir::css;
 
 const FOLDER_ICON: &'static str = "▼";
@@ -19,24 +19,28 @@ pub struct Props<'a> {
 }
 
 pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
-    let layer = use_subject_layer(cx);
+    let layer = use_layer(cx);
+    let all_subjects = use_subjects(cx);
     let search = use_state(cx, String::new);
 
-    let all_subjects = layer.read().get_subjects();
-
     // TODO: Add semantic sorting
-    let filtered_subjects = use_memo(
+    let (filtered_subjects, subject_tree) = use_memo(
         cx,
-        (&cx.props.ignore_subjects, &all_subjects, search),
-        |(ignore_subjects, subjects, search)| {
-            let mut subjects = subjects
+        (&cx.props.ignore_subjects, &*all_subjects.read(), search),
+        |(ignore_subjects, all_subjects, search)| {
+            let mut subjects = all_subjects
                 .values()
                 .filter(|s| !ignore_subjects.contains(&s.id))
                 .filter(|s| s.name.to_lowercase().contains(&search.to_lowercase()))
                 .cloned()
                 .collect::<Vec<_>>();
             subjects.sort_unstable_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
-            std::rc::Rc::new(subjects)
+
+            let subject_tree = construct_subject_tree(
+                &*all_subjects,
+                &*subjects.iter().map(|s| s.id).collect::<Vec<_>>(),
+            );
+            (std::rc::Rc::new(subjects), subject_tree)
         },
     );
 
@@ -78,11 +82,6 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         },
     };
 
-    let subject_tree = construct_subject_tree(
-        &all_subjects,
-        &filtered_subjects.iter().map(|s| s.id).collect::<Vec<_>>(),
-    );
-
     let tree_view_style = css!(
         "
         display: flex;
@@ -93,6 +92,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
         "
     );
 
+    let all_subjects = all_subjects.read();
     let tree_view = rsx! {
         div {
             class: "{tree_view_style}",

@@ -1,13 +1,10 @@
-use std::cell::RefCell;
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::hash::Hash;
 use std::rc::Rc;
 
-use dioxus::prelude::{
-    use_shared_state, use_shared_state_provider, 
-    UseSharedState, ScopeState,
-};
+use dioxus::prelude::{use_context, use_context_provider, ScopeState};
+use dioxus_signals::*;
 
 use super::notes::{NoteBuilder, NoteData, NoteSearch};
 use super::search::SearchWorker;
@@ -91,80 +88,109 @@ where
     }
 }
 
+type Notes = Signal<Vec<Note>>;
+type Subjects = Signal<Rc<BTreeMap<SubjectId, Subject>>>;
+type SubjectChildren = Signal<BTreeMap<SubjectId, Vec<SubjectId>>>;
+
 /// Layer provides an abstraction layer over the store to provide a
 /// consistent interface for the rest of the application.
 pub struct Layer {
     store: Rc<Store>,
-    note_cache: RefCell<Cache<NoteId, Note>>,
-    query_cache: RefCell<Cache<NoteSearch, Vec<NoteId>>>,
+    note_cache: Cache<NoteId, Note>,
+    query_cache: Cache<NoteSearch, Vec<NoteId>>,
     event_count: usize,
+
+    query: NoteSearch,
+    notes: Notes,
+    subjects: Subjects,
+    subject_children: SubjectChildren,
 }
 
 impl Layer {
-    pub fn new(store: Rc<Store>) -> Self {
+    pub fn new(
+        store: Rc<Store>,
+        notes: Notes,
+        subjects: Subjects,
+        subject_children: SubjectChildren,
+    ) -> Self {
         Self {
             store,
-            note_cache: RefCell::new(Cache::new(1024)),
-            query_cache: RefCell::new(Cache::new(16)),
+            note_cache: Cache::new(1024),
+            query_cache: Cache::new(16),
             event_count: 0,
+            query: Default::default(),
+            notes,
+            subjects,
+            subject_children,
         }
     }
 
-    pub fn create_note(&mut self, builder: NoteBuilder) -> Note {
+    fn update_notes(&mut self) {
+        let search = self.query.clone();
+        let notes = self
+            .get_note_ids_for_search(search)
+            .into_iter()
+            .map(|id| self.get_note_by_id(id))
+            .collect();
+
+        *self.notes.write() = notes;
+    }
+
+    pub fn create_note(&mut self, builder: NoteBuilder) {
+        self.store.add_note(builder).unwrap();
         self.event();
         self.invalidate_note_queries();
-
-        let note = self.store.add_note(builder).unwrap();
-        note
+        self.update_notes();
     }
 
     pub fn delete_note_by_id(&mut self, id: NoteId) {
+        self.store.delete_note(id).unwrap();
         self.event();
         self.invalidate_note(id);
         self.invalidate_note_queries();
-
-        self.store.delete_note(id).unwrap();
+        self.update_notes();
     }
 
     pub fn edit_note_with(&mut self, id: NoteId, f: impl FnOnce(&mut NoteData)) {
-        self.event();
-        self.invalidate_note(id);
-        self.invalidate_note_queries();
-
         let old_note = self.store.get_note(id).unwrap();
         let mut note = (&*old_note).clone();
         f(&mut note);
         self.store.update_note(Rc::new(note)).unwrap();
+
+        self.event();
+        self.invalidate_note(id);
+        self.invalidate_note_queries();
+        self.update_notes();
     }
 
     fn invalidate_note_queries(&mut self) {
-        self.query_cache.borrow_mut().clear();
+        self.query_cache.clear();
     }
 
     fn invalidate_note(&mut self, id: NoteId) {
-        self.note_cache.borrow_mut().invalidate_key(&id);
+        self.note_cache.invalidate_key(&id);
     }
 
     pub fn search(&self) -> SearchWorker {
         self.store.search.clone()
     }
 
-    pub fn get_notes_for_search(&self, search: NoteSearch) -> Vec<Note> {
-        self.get_note_ids_for_search(search)
-            .into_iter()
-            .map(|id| self.get_note_by_id(id))
-            .collect()
+    pub fn set_search(&mut self, search: NoteSearch) {
+        if self.query == search {
+            return;
+        }
+
+        self.query = search;
+        self.update_notes();
     }
 
-    fn get_note_ids_for_search(&self, search: NoteSearch) -> Vec<NoteId> {
+    fn get_note_ids_for_search(&mut self, search: NoteSearch) -> Vec<NoteId> {
         self.query_cache
-            .borrow_mut()
             .get_or_insert_with(search.clone(), || self.store.find_notes(search).unwrap())
     }
 
-    fn get_note_by_id(&self, id: NoteId) -> Note {
+    fn get_note_by_id(&mut self, id: NoteId) -> Note {
         self.note_cache
-            .borrow_mut()
             .get_or_insert_with(id, || self.store.get_note(id).unwrap())
     }
 
@@ -175,83 +201,61 @@ impl Layer {
     pub fn event_count(&self) -> usize {
         self.event_count
     }
-}
 
-pub struct SubjectLayer {
-    store: Rc<Store>,
-    subjects: RefCell<Option<Rc<BTreeMap<SubjectId, Subject>>>>,
-    subject_children: RefCell<Cache<SubjectId, Vec<SubjectId>>>,
-}
+    fn update_subjects(&mut self) {
+        let subject_list = self.store.get_subjects().unwrap();
+        let map = subject_list
+            .iter()
+            .map(|s| (s.id, s.clone()))
+            .collect::<BTreeMap<_, _>>();
+        *self.subjects.write() = Rc::new(map);
 
-impl SubjectLayer {
-    pub fn new(store: Rc<Store>) -> Self {
-        Self {
-            store,
-            subjects: Default::default(),
-            subject_children: RefCell::new(Cache::new(16)),
-        }
-    }
-
-    fn invalidate_subjects(&mut self) {
-        *self.subjects.borrow_mut() = None;
-        self.subject_children.borrow_mut().clear();
-    }
-
-    pub fn get_subjects(&self) -> Rc<BTreeMap<SubjectId, Subject>> {
-        let mut subjects = self.subjects.borrow_mut();
-        if subjects.is_none() {
-            let subject_list = self.store.get_subjects().unwrap();
-            let map = subject_list
-                .iter()
-                .map(|s| (s.id, s.clone()))
-                .collect::<BTreeMap<_, _>>();
-            *subjects = Some(Rc::new(map));
-        }
-
-        subjects.as_ref().unwrap().clone()
+        *self.subject_children.write() = subject_list
+            .iter()
+            .map(|subject| {
+                (
+                    subject.id,
+                    self.store.get_subject_children(subject.id).unwrap(),
+                )
+            })
+            .collect();
     }
 
     pub fn create_subject(&mut self, name: String) -> Subject {
-        self.invalidate_subjects();
         let subject = self.store.add_subject(name).unwrap();
+        self.update_subjects();
         subject
     }
 
     pub fn set_subject_parent(&mut self, subject: SubjectId, parent: Option<SubjectId>) {
-        self.invalidate_subjects();
         self.store.set_subject_parent(subject, parent).unwrap();
-    }
-
-    pub fn get_subject_children(&self, subject: SubjectId) -> Vec<Subject> {
-        self.subject_children
-            .borrow_mut()
-            .get_or_insert_with(subject, || {
-                self.store.get_subject_children(subject).unwrap()
-            })
-            .iter()
-            .map(|id| self.get_subject_by_id(*id))
-            .collect()
-    }
-
-    pub fn get_subject_by_id(&self, id: SubjectId) -> Subject {
-        self.get_subjects().get(&id).unwrap().clone()
+        self.update_subjects();
     }
 }
 
-pub fn use_layer_provider(cx: &ScopeState, conn: ConnectionType) -> &UseSharedState<Layer> {
-    use_shared_state_provider(cx, || {
+pub fn use_layer_provider(cx: &ScopeState, conn: ConnectionType) -> Signal<Layer> {
+    let notes = *use_context_provider(cx, Default::default);
+    let subjects = *use_context_provider(cx, Default::default);
+    let subject_children = *use_context_provider(cx, Default::default);
+    *use_context_provider(cx, || {
         let store = Store::new(conn);
-        Layer::new(Rc::new(store))
-    });
-    let layer = use_shared_state::<Layer>(cx).unwrap();
-    use_shared_state_provider(cx, || SubjectLayer::new(layer.read().store.clone()));
-    layer
+        let layer = Layer::new(Rc::new(store), notes, subjects, subject_children);
+        Signal::new(layer)
+    })
 }
 
-pub fn use_layer(cx: &ScopeState) -> &UseSharedState<Layer> {
-    use_shared_state(cx).unwrap()
+pub fn use_layer(cx: &ScopeState) -> Signal<Layer> {
+    *use_context(cx).expect("Layer should be provided")
 }
 
-pub fn use_subject_layer(cx: &ScopeState) -> &UseSharedState<SubjectLayer> {
-    use_shared_state(cx).unwrap()
+pub fn use_notes(cx: &ScopeState) -> Notes {
+    *use_context(cx).expect("Layer should be provided")
+}
+
+pub fn use_subjects(cx: &ScopeState) -> Subjects {
+    *use_context(cx).expect("Layer should be provided")
+}
+
+pub fn use_subject_children(cx: &ScopeState) -> SubjectChildren {
+    *use_context(cx).expect("Layer should be provided")
 }

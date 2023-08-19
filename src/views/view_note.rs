@@ -1,12 +1,12 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
-    layer::{use_layer, use_subject_layer},
+    layer::{use_layer, use_subjects},
     notes::{Note, TaskState},
     subjects::{Subject, SubjectId},
 };
 
 use crate::views::{
-    confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote, ViewState,
+    confirm_dialog::ConfirmDialog, markdown::Markdown, note_input::EditNote, use_view_state,
 };
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -33,8 +33,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
     }
 
     let layer = use_layer(cx);
-    // TODO: Make this write-only whwn that is implemented in dioxus
-    let view_state = use_shared_state::<ViewState>(cx).unwrap();
+    let view_state = use_view_state(cx);
 
     let state = use_state(cx, || State::Normal);
 
@@ -120,7 +119,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
         TaskState::Todo => rsx! {
             div {
                 class: "task-button todo",
-                onclick: |_| {
+                onclick: move |_| {
                     layer.write().edit_note_with(cx.props.note.id, |note| {
                         note.task_state = TaskState::Done;
                         note.done_at = Some(chrono::Local::now());
@@ -132,7 +131,7 @@ pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
         TaskState::Done => rsx! {
             div {
                 class: "task-button done",
-                onclick: |_| {
+                onclick: move |_| {
                     layer.write().edit_note_with(cx.props.note.id, |note| {
                         note.task_state = TaskState::Todo;
                         note.done_at = None;
@@ -291,8 +290,7 @@ pub struct SubjectCardsProps<'a> {
 }
 
 pub fn SubjectCards<'a>(cx: Scope<'a, SubjectCardsProps<'a>>) -> Element<'a> {
-    let layer = use_subject_layer(cx);
-    let subjects = layer.read().get_subjects();
+    let subjects = use_subjects(cx).read().clone();
 
     let mut cards = cx
         .props
