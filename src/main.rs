@@ -189,9 +189,18 @@ fn App(cx: Scope<'_, AppProps>) -> Element<'_> {
     use_eval(cx)(js).unwrap();
 
     let onkeydown = move |e: KeyboardEvent| match e.key() {
+        Key::Enter if e.modifiers().contains(Modifiers::CONTROL) => {
+            view_state.write().start_note_input();
+        }
         Key::Character(c) if e.modifiers().contains(Modifiers::CONTROL) => match c.as_str() {
             "n" => {
-                view_state.write().start_note_input();
+                view_state.write().show_notes_only();
+            }
+            "t" => {
+                view_state.write().show_tasks_only();
+            }
+            "f" => {
+                view_state.write().show_search();
             }
             "+" => {
                 let new_zoom = *zoom_level.get() + 10;
@@ -207,7 +216,9 @@ fn App(cx: Scope<'_, AppProps>) -> Element<'_> {
                 zoom_level.set(100);
                 window.set_zoom_level(1.0);
             }
-            _ => {}
+            c => {
+                println!("{:?}", c)
+            }
         },
         _ => {}
     };

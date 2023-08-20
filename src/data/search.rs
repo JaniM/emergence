@@ -138,7 +138,8 @@ fn search_text(
     limit: usize,
 ) -> rusqlite::Result<Vec<NoteData>> {
     use itertools::Itertools;
-    tracing::debug!("Begin");
+
+    tracing::trace!("Begin");
 
     let sanitized_texts = texts
         .iter()
@@ -146,6 +147,7 @@ fn search_text(
             text.to_lowercase()
                 .replace(|c: char| !c.is_alphabetic(), " ")
         })
+        .filter(|text| !text.is_empty())
         .collect::<Vec<_>>();
 
     let groups = sanitized_texts
@@ -155,7 +157,7 @@ fn search_text(
 
     let notes = tantivy_find_notes(index, reader, conn, &groups, limit).unwrap();
 
-    tracing::debug!("Found {} notes", notes.len());
+    tracing::trace!("Found {} notes", notes.len());
     Ok(notes)
 }
 
@@ -194,7 +196,7 @@ fn schema() -> Schema {
         ),
     );
     schema_builder.add_u64_field("id", INDEXED | STORED | FAST);
-    
+
     schema_builder.build()
 }
 
@@ -289,6 +291,11 @@ fn tantivy_find_notes(
     text: &str,
     limit: usize,
 ) -> tantivy::Result<Vec<NoteData>> {
+    if text.is_empty() {
+        tracing::trace!("Ignoring empty search");
+        return Ok(Vec::new());
+    }
+
     let schema = schema();
     let id_schema = schema.get_field("id").unwrap();
     let text_schema = schema.get_field("text").unwrap();
