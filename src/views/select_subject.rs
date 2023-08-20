@@ -7,7 +7,7 @@ use dioxus::prelude::*;
 use emergence::data::layer::{use_layer, use_subjects};
 use sir::css;
 
-const FOLDER_ICON: &'static str = "▼";
+const FOLDER_ICON: &str = "▼";
 
 #[derive(Props)]
 pub struct Props<'a> {
@@ -37,8 +37,8 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
             subjects.sort_unstable_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 
             let subject_tree = construct_subject_tree(
-                &*all_subjects,
-                &*subjects.iter().map(|s| s.id).collect::<Vec<_>>(),
+                &all_subjects,
+                &subjects.iter().map(|s| s.id).collect::<Vec<_>>(),
             );
             (std::rc::Rc::new(subjects), subject_tree)
         },
@@ -288,7 +288,7 @@ fn construct_subject_tree(
 ) -> SubjectTree {
     use std::collections::VecDeque;
 
-    let mut queue = filtered.into_iter().cloned().collect::<VecDeque<_>>();
+    let mut queue = filtered.iter().cloned().collect::<VecDeque<_>>();
     let mut tree = BTreeMap::new();
     let mut roots = Vec::new();
 

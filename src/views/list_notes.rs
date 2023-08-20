@@ -56,7 +56,7 @@ pub fn ListNotes(cx: Scope) -> Element {
     let query = use_notes(cx);
 
     let mut groups = if !tasks_only {
-        group_by_date(&*query.read())
+        group_by_date(&query.read())
     } else {
         let mut done = vec![];
         let mut undone = vec![];
@@ -81,7 +81,7 @@ pub fn ListNotes(cx: Scope) -> Element {
                 undone.push((first_date, key, group));
             }
         }
-        undone.extend(done.drain(..));
+        undone.append(&mut done);
         undone
     };
 

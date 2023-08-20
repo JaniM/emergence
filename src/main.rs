@@ -63,7 +63,7 @@ enum LogLevel {
 }
 
 impl LogLevel {
-    fn to_level_filter(&self) -> LevelFilter {
+    fn to_level_filter(self) -> LevelFilter {
         match self {
             LogLevel::Trace => LevelFilter::TRACE,
             LogLevel::Debug => LevelFilter::DEBUG,
@@ -165,7 +165,7 @@ struct AppProps {
     db_file: PathBuf,
 }
 
-fn App<'a>(cx: Scope<'a, AppProps>) -> Element<'a> {
+fn App(cx: Scope<'_, AppProps>) -> Element<'_> {
     let layer = use_layer_provider(cx, data::ConnectionType::File(cx.props.db_file.clone()));
     let view_state = *use_context_provider(cx, || Signal::new(ViewState::new(layer)));
 

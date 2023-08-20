@@ -88,7 +88,7 @@ struct NoteInputProps<'a> {
     initial_subjects: Vec<SubjectId>,
 }
 
-const TEXTAREA_HACK: &'static str = r#"
+const TEXTAREA_HACK: &str = r#"
 const tx = document.getElementsByClassName("note-textarea");
 for (let i = 0; i < tx.length; i++) {
     const parent = tx[i].parentElement;
@@ -163,7 +163,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
         show_subjects.set(ShowSubjects::No);
         textarea.get().as_ref().unwrap().set_focus(true);
         if *show_subjects.get() == ShowSubjects::YesKeyboard
-            && text.get().chars().last() == Some('@')
+            && text.get().ends_with('@')
         {
             // remove the @
             text.set(text.get()[0..text.get().len() - 1].to_string());

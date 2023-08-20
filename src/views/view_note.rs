@@ -23,7 +23,7 @@ pub struct ViewNoteProps {
     hide_subject: Option<SubjectId>,
 }
 
-pub fn ViewNote<'a>(cx: Scope<'a, ViewNoteProps>) -> Element<'a> {
+pub fn ViewNote(cx: Scope<'_, ViewNoteProps>) -> Element<'_> {
     #[derive(Clone, Copy, PartialEq)]
     enum State {
         Normal,

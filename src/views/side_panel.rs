@@ -58,7 +58,7 @@ pub fn SidePanel(cx: Scope) -> Element {
     } = &*view_state_read;
 
     let subject_name = selected_subject
-        .and_then(|id| subjects.get(&id).clone())
+        .and_then(|id| subjects.get(&id))
         .map(|s| s.name.clone())
         .unwrap_or_else(|| "Journal".to_string());
 
@@ -69,7 +69,7 @@ pub fn SidePanel(cx: Scope) -> Element {
         },
         SidePanelState::SubjectDetails(subject) => rsx! {
             SubjectDetails {
-                subject_id: subject.clone(),
+                subject_id: *subject,
             }
         },
         SidePanelState::ListSimilar { text, .. } => rsx! {
@@ -189,7 +189,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     let subjects = subjects.read();
     let subject_children = use_subject_children(cx);
     let subject_children = subject_children.read();
-    let my_subject = subjects.get(&subject_id).unwrap().clone();
+    let my_subject = subjects.get(subject_id).unwrap().clone();
 
     let children = subject_children
         .get(subject_id)
