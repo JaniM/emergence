@@ -239,7 +239,9 @@ pub fn use_layer_provider(cx: &ScopeState, conn: ConnectionType) -> Signal<Layer
     let subject_children = *use_context_provider(cx, Default::default);
     *use_context_provider(cx, || {
         let store = Store::new(conn);
-        let layer = Layer::new(Rc::new(store), notes, subjects, subject_children);
+        let mut layer = Layer::new(Rc::new(store), notes, subjects, subject_children);
+        layer.update_subjects();
+        layer.update_notes();
         Signal::new(layer)
     })
 }

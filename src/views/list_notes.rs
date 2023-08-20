@@ -44,7 +44,7 @@ fn reverse_groups<T>(groups: &mut [NoteGroup<T>]) {
 pub fn ListNotes(cx: Scope) -> Element {
     let view_state = use_view_state(cx);
 
-    let ViewState {
+    let &ViewState {
         tasks_only,
         selected_subject,
         scroll_to_note,
@@ -55,7 +55,7 @@ pub fn ListNotes(cx: Scope) -> Element {
     let subject_id_key = selected_subject.map_or_else(|| "none".to_string(), |id| id.0.to_string());
     let query = use_notes(cx);
 
-    let mut groups = if !*tasks_only {
+    let mut groups = if !tasks_only {
         group_by_date(&*query.read())
     } else {
         let mut done = vec![];
@@ -102,7 +102,7 @@ pub fn ListNotes(cx: Scope) -> Element {
                             rsx! { ViewNote {
                                 key: "{note.id.0}",
                                 note: note.clone(),
-                                hide_subject: *selected_subject,
+                                hide_subject: selected_subject,
                                 subject_select: OnSubjectSelect::Switch
                             } },
                         )
@@ -112,7 +112,7 @@ pub fn ListNotes(cx: Scope) -> Element {
         })
         .collect::<Vec<_>>();
 
-    if let Some(note_id) = *scroll_to_note {
+    if let Some(note_id) = scroll_to_note {
         let key = format!("scroll-to-{subject_id_key}");
         for (_, _, group) in groups.iter_mut() {
             let idx = group.iter().position(|(id, _)| *id == note_id);
@@ -142,14 +142,14 @@ pub fn ListNotes(cx: Scope) -> Element {
         }
     }
 
-    let add_note = if *show_input {
+    let add_note = if show_input {
         rsx! {
             CreateNote {
                 key: "input",
-                subject: *selected_subject,
-                task: *tasks_only,
-                on_create_note: |_| view_state.write().finish_note_input(true),
-                on_cancel: |_| view_state.write().finish_note_input(false),
+                subject: selected_subject,
+                task: tasks_only,
+                on_create_note: move |_| view_state.write().finish_note_input(true),
+                on_cancel: move |_| view_state.write().finish_note_input(false),
             }
         }
     } else {

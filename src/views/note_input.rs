@@ -25,7 +25,7 @@ pub struct CreateNoteProps<'a> {
 pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
     let layer = use_layer(cx);
 
-    let on_create_note = |(text, subjects): (String, Vec<SubjectId>)| {
+    let on_create_note = move |(text, subjects): (String, Vec<SubjectId>)| {
         if !text.is_empty() {
             let note = NoteBuilder::new(text.clone())
                 .subjects(subjects)

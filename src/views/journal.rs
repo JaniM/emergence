@@ -6,7 +6,7 @@ use crate::views::{list_notes::ListNotes, search_view::Search, use_view_state, V
 pub fn Journal(cx: Scope) -> Element {
     let view_state = use_view_state(cx);
 
-    let ViewState { show_search, .. } = &*view_state.read();
+    let &ViewState { show_search, .. } = &*view_state.read();
 
     let style = css!(
         "
@@ -28,7 +28,7 @@ pub fn Journal(cx: Scope) -> Element {
         div {
             class: "{style}",
             Tabs { },
-            if *show_search {
+            if show_search {
                 rsx! {
                     Search { }
                 }
