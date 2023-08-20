@@ -112,7 +112,7 @@ impl Store {
             ORDER BY name ASC",
         )?;
         let subjects = stmt
-            .query_map(params![subject.0], |row| Ok(row.get(0)?))?
+            .query_map(params![subject.0], |row| row.get(0))?
             .collect::<Result<Vec<_>, _>>()?;
         Ok(subjects)
     }

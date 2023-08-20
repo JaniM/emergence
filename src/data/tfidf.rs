@@ -27,8 +27,8 @@ fn trim_punctuation(word: &str) -> &str {
 }
 
 fn naive_singularize(word: &str) -> &str {
-    if word.ends_with('s') {
-        &word[..word.len() - 1]
+    if let Some(stripped) = word.strip_suffix('s') {
+        stripped
     } else {
         word
     }
@@ -52,19 +52,18 @@ fn ignore_code_blocks(text: &str) -> String {
 fn normalize_text(text: &str) -> String {
     let text = ignore_code_blocks(text);
     let text = text.replace(|c: char| !c.is_alphabetic(), " ");
-    let text = text.to_lowercase();
-    text
+
+    text.to_lowercase()
 }
 
 fn normalize_word(word: &str) -> &str {
     let word = trim_punctuation(word);
     let word = naive_singularize(word);
-    let word = if word.ends_with("ing") && word.len() >= 6 {
+    if word.ends_with("ing") && word.len() >= 6 {
         &word[..word.len() - 3]
     } else {
         word
-    };
-    word
+    }
 }
 
 /// Counts the number of times each word occurs in the text.
@@ -89,10 +88,7 @@ fn count_word_occurrences(text: &str) -> BTreeMap<&str, usize> {
     counts
 }
 
-pub fn best_words<'a, 'b>(
-    conn: &'a rusqlite::Connection,
-    text: &'b str,
-) -> rusqlite::Result<Vec<String>> {
+pub fn best_words(conn: &rusqlite::Connection, text: &str) -> rusqlite::Result<Vec<String>> {
     use rusqlite::OptionalExtension;
 
     let text = normalize_text(text);

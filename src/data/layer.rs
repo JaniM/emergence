@@ -126,7 +126,7 @@ impl Layer {
     }
 
     fn update_notes(&mut self) {
-        let search = self.query.clone();
+        let search = self.query;
         let notes = self
             .get_note_ids_for_search(search)
             .into_iter()
@@ -153,7 +153,7 @@ impl Layer {
 
     pub fn edit_note_with(&mut self, id: NoteId, f: impl FnOnce(&mut NoteData)) {
         let old_note = self.store.get_note(id).unwrap();
-        let mut note = (&*old_note).clone();
+        let mut note = (*old_note).clone();
         f(&mut note);
         self.store.update_note(Rc::new(note)).unwrap();
 
@@ -186,7 +186,7 @@ impl Layer {
 
     fn get_note_ids_for_search(&mut self, search: NoteSearch) -> Vec<NoteId> {
         self.query_cache
-            .get_or_insert_with(search.clone(), || self.store.find_notes(search).unwrap())
+            .get_or_insert_with(search, || self.store.find_notes(search).unwrap())
     }
 
     fn get_note_by_id(&mut self, id: NoteId) -> Note {

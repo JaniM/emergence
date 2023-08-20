@@ -14,13 +14,13 @@ pub fn export(db_path: PathBuf, export_path: PathBuf) {
         .get_subjects()
         .unwrap()
         .into_iter()
-        .map(|s| (&*s).clone())
+        .map(|s| (*s).clone())
         .collect();
     let notes = store
         .get_all_notes()
         .unwrap()
         .into_iter()
-        .map(|n| (&*n).clone())
+        .map(|n| (*n).clone())
         .collect();
 
     let serialized = SerializedStore { subjects, notes };

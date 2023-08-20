@@ -194,8 +194,8 @@ fn schema() -> Schema {
         ),
     );
     schema_builder.add_u64_field("id", INDEXED | STORED | FAST);
-    let schema = schema_builder.build();
-    schema
+    
+    schema_builder.build()
 }
 
 pub fn construct_tantivy_index(path: ConnectionType) -> Index {
@@ -294,7 +294,7 @@ fn tantivy_find_notes(
     let text_schema = schema.get_field("text").unwrap();
 
     let searcher = reader.searcher();
-    let query_parser = tantivy::query::QueryParser::for_index(&index, vec![text_schema]);
+    let query_parser = tantivy::query::QueryParser::for_index(index, vec![text_schema]);
     let query = query_parser.parse_query(text);
 
     let query = match query {

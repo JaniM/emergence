@@ -232,7 +232,7 @@ impl Store {
 
         tx.commit()?;
 
-        search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
+        search::tantivy_add_note(&mut self.index_writer.borrow_mut(), note).unwrap();
 
         Ok(())
     }
@@ -251,7 +251,7 @@ impl Store {
                 )?
                 .query_row(params![note.id.0], |row| row.get::<_, String>(0))?;
 
-            if &old_text != &note.text {
+            if old_text != note.text {
                 tfidf::remove_word_occurences(&tx, &old_text)?;
                 tfidf::insert_word_occurences(&tx, &note.text)?;
 
@@ -410,7 +410,7 @@ impl Store {
 
 const PAGE_SIZE: usize = 200;
 
-pub const SINGLE_NOTE_COLUMNS: &'static str = "
+pub const SINGLE_NOTE_COLUMNS: &str = "
     n.rowid,
     n.id,
     n.text,
@@ -422,7 +422,7 @@ pub const SINGLE_NOTE_COLUMNS: &'static str = "
     n.done_at
 ";
 
-const NOTE_LIST_ALL: &'static str = formatcp!(
+const NOTE_LIST_ALL: &str = formatcp!(
     r#"SELECT DISTINCT s.note_id
     FROM notes_search s
     ORDER BY s.created_at DESC
@@ -430,7 +430,7 @@ const NOTE_LIST_ALL: &'static str = formatcp!(
     page = PAGE_SIZE
 );
 
-const NOTE_SEARCH_BY_SUBJECT: &'static str = formatcp!(
+const NOTE_SEARCH_BY_SUBJECT: &str = formatcp!(
     r#"SELECT s.note_id
     FROM notes_search s
     WHERE s.subject_id = ?1
