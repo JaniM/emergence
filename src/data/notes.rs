@@ -25,8 +25,11 @@ impl FromSql for NoteId {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+)]
 pub enum TaskState {
+    #[default]
     NotATask,
     Todo,
     Done,
@@ -34,7 +37,7 @@ pub enum TaskState {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NoteData {
-    pub rowid: u64,
+    pub rowid: i64,
     pub id: NoteId,
     pub text: String,
     pub subjects: Vec<SubjectId>,
@@ -46,35 +49,117 @@ pub struct NoteData {
 
 pub type Note = Rc<NoteData>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct NoteBuilder {
-    text: String,
-    subjects: Vec<SubjectId>,
-    task_state: TaskState,
+    rowid: Option<i64>,
+    pub id: Option<NoteId>,
+    pub text: Option<String>,
+    pub subjects: Option<Vec<SubjectId>>,
+    pub task_state: Option<TaskState>,
+    pub created_at: Option<DateTime<Local>>,
+    pub modified_at: Option<DateTime<Local>>,
+    pub done_at: Option<Option<DateTime<Local>>>,
 }
 
 impl NoteBuilder {
-    pub fn new(text: String) -> Self {
-        Self {
-            text,
-            subjects: Vec::new(),
-            task_state: TaskState::NotATask,
-        }
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn with_id(mut self, id: NoteId) -> Self {
+        self.id = Some(id);
+        self
+    }
+
+    pub fn text(mut self, text: impl ToString) -> Self {
+        self.text = Some(text.to_string());
+        self
     }
 
     pub fn subject(mut self, subject: SubjectId) -> Self {
-        self.subjects.push(subject);
+        self.subjects.get_or_insert_with(Vec::new).push(subject);
         self
     }
 
     pub fn subjects(mut self, subjects: Vec<SubjectId>) -> Self {
-        self.subjects.extend(subjects);
+        self.subjects.get_or_insert_with(Vec::new).extend(subjects);
         self
     }
 
     pub fn task_state(mut self, task_state: TaskState) -> Self {
-        self.task_state = task_state;
+        self.task_state = Some(task_state);
         self
+    }
+
+    pub fn created_at(mut self, time: DateTime<Local>) -> Self {
+        self.created_at = Some(time);
+        self
+    }
+
+    pub fn modified_at(mut self, time: DateTime<Local>) -> Self {
+        self.modified_at = Some(time);
+        self
+    }
+
+    pub fn done_at(mut self, time: Option<DateTime<Local>>) -> Self {
+        self.done_at = Some(time);
+        self
+    }
+
+    pub fn modified_now(self) -> Self {
+        self.modified_at(Local::now())
+    }
+
+    pub fn apply_to_note_inplace(self, note: &mut NoteData) {
+        note.rowid = self.rowid.unwrap_or(note.rowid);
+        note.id = self.id.unwrap_or(note.id);
+        if let Some(text) = self.text {
+            note.text = text;
+        }
+        if let Some(subjects) = self.subjects {
+            note.subjects = subjects;
+        }
+        note.task_state = self.task_state.unwrap_or(note.task_state);
+        note.created_at = self.created_at.unwrap_or(note.created_at);
+        note.modified_at = self.modified_at.unwrap_or(note.modified_at);
+        note.done_at = self.done_at.unwrap_or(note.done_at);
+    }
+
+    pub fn apply_to_note(self, note: &NoteData) -> NoteData {
+        let mut note = note.clone();
+        self.apply_to_note_inplace(&mut note);
+        note
+    }
+
+    pub fn build(self) -> NoteData {
+        let now = Local::now();
+        NoteData {
+            rowid: self.rowid.unwrap_or_default(),
+            id: self.id.unwrap_or_else(|| NoteId(Uuid::new_v4())),
+            text: self.text.unwrap_or_default(),
+            subjects: self.subjects.unwrap_or_default(),
+            task_state: self.task_state.unwrap_or_default(),
+            created_at: self.created_at.unwrap_or(now),
+            modified_at: self.modified_at.unwrap_or(now),
+            done_at: self.done_at.flatten(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl NoteBuilder {
+    pub fn id(&self) -> NoteId {
+        self.id.unwrap()
+    }
+
+    pub fn decide_id(mut self) -> Self {
+        self.id = Some(NoteId(Uuid::new_v4()));
+        self
+    }
+
+    pub fn assert_matches_note(&self, note: &NoteData) {
+        let expected = self.clone().apply_to_note(note);
+        assert_eq!(&expected, note);
     }
 }
 
@@ -105,6 +190,12 @@ impl NoteSearch {
     }
 }
 
+impl ToSql for TaskState {
+    fn to_sql(&self) -> rusqlite::Result<rusqlite::types::ToSqlOutput<'static>> {
+        Ok(rusqlite::types::ToSqlOutput::from(self.to_db_value()))
+    }
+}
+
 impl TaskState {
     pub fn to_db_value(self) -> i64 {
         match self {
@@ -129,26 +220,8 @@ impl NoteData {
         Rc::new(self)
     }
 
-    pub fn with_task_state(&self, task_state: TaskState) -> Self {
-        Self {
-            task_state,
-            ..self.clone()
-        }
-    }
-
-    #[cfg(test)]
-    pub fn with_subjects(&self, subjects: Vec<SubjectId>) -> Self {
-        Self {
-            subjects,
-            ..self.clone()
-        }
-    }
-
-    pub fn with_created_at(&self, created_at: DateTime<Local>) -> Self {
-        Self {
-            created_at,
-            ..self.clone()
-        }
+    pub fn modify_with(&self, f: impl FnOnce(NoteBuilder) -> NoteBuilder) -> NoteData {
+        f(NoteBuilder::new()).apply_to_note(self)
     }
 }
 
@@ -156,143 +229,69 @@ impl Store {
     #[instrument(skip(self))]
     pub fn add_note(&self, note: NoteBuilder) -> rusqlite::Result<Note> {
         debug!("Adding note");
-        let id = Uuid::new_v4();
-        let created_at = Local::now();
-        let rowid;
-        {
-            let mut conn = self.conn.borrow_mut();
-            let tx = conn.transaction()?;
+        let mut conn = self.conn.borrow_mut();
+        let tx = conn.transaction()?;
+        let note = self.add_note_with_tx(&tx, note.build())?;
+        tx.commit()?;
+        Ok(note)
+    }
 
-            tx.prepare_cached(
-                "INSERT INTO notes (
-                    id, text, task_state, created_at, modified_at
+    pub fn add_note_with_tx(&self, tx: &Connection, note: NoteData) -> rusqlite::Result<Note> {
+        let mut note = note;
+        tx.prepare_cached(
+            "INSERT INTO notes (
+                    id,
+                    text,
+                    task_state,
+                    created_at,
+                    modified_at,
+                    done_at
                 )
-                VALUES (?1, ?2, ?3, ?4, ?4)",
-            )?
-            .execute(params![
-                id,
-                &note.text,
-                note.task_state.to_db_value(),
-                created_at.naive_utc().timestamp_nanos()
-            ])?;
+                VALUES (
+                    :id,
+                    :text,
+                    :task_state,
+                    :created_at,
+                    :modified_at,
+                    :done_at
+                )",
+        )?
+        .execute(named_params! {
+            ":id": &note.id,
+            ":text": &note.text,
+            ":task_state": &note.task_state,
+            ":created_at": &note.created_at.naive_utc().timestamp_nanos(),
+            ":modified_at": &note.modified_at.naive_utc().timestamp_nanos(),
+            ":done_at": &note.done_at.map(|t| t.naive_utc().timestamp_nanos()),
+        })?;
 
-            rowid = tx.last_insert_rowid();
+        note.rowid = tx.last_insert_rowid();
 
-            let subjects = subjects_or_nil(&note.subjects);
+        let subjects = subjects_or_nil(&note.subjects);
 
-            for subject in subjects {
-                tx.prepare_cached(
-                    "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
-                )?
-                .execute(params![id, subject.0])?;
-            }
-
-            tfidf::insert_word_occurences(&tx, &note.text)?;
-
-            tx.commit()?;
+        for subject in subjects {
+            tx.prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
+                .execute(params![note.id, subject.0])?;
         }
 
-        let note = Rc::new(NoteData {
-            rowid: rowid as u64,
-            id: NoteId(id),
-            text: note.text,
-            subjects: note.subjects,
-            task_state: TaskState::NotATask,
-            created_at,
-            modified_at: created_at,
-            done_at: None,
-        });
+        tfidf::insert_word_occurences(tx, &note.text)?;
+
+        let note = Rc::new(note);
         search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
 
         Ok(note)
     }
 
-    pub fn import_note(&self, note: &NoteData) -> rusqlite::Result<()> {
+    #[instrument(skip(self))]
+    pub fn update_note(&self, note: NoteData) -> rusqlite::Result<()> {
+        debug!("Updating note");
         let mut conn = self.conn.borrow_mut();
         let tx = conn.transaction()?;
-        tx.prepare_cached(
-            "INSERT INTO notes (
-                    id, text, task_state, created_at, modified_at, done_at
-                )
-                VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-        )?
-        .execute(params![
-            note.id.0,
-            &note.text,
-            note.task_state.to_db_value(),
-            note.created_at.naive_utc().timestamp_nanos(),
-            note.modified_at.naive_utc().timestamp_nanos(),
-            note.done_at.map(|ts| ts.naive_utc().timestamp_nanos())
-        ])?;
 
-        for subject in subjects_or_nil(&note.subjects) {
-            tx.prepare_cached("INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)")?
-                .execute(params![note.id.0, subject.0])?;
-        }
+        self.delete_note_with_tx(&tx, note.id)?;
+        self.add_note_with_tx(&tx, note)?;
 
         tx.commit()?;
-
-        search::tantivy_add_note(&mut self.index_writer.borrow_mut(), note).unwrap();
-
-        Ok(())
-    }
-
-    #[instrument(skip(self))]
-    pub fn update_note(&self, note: Note) -> rusqlite::Result<()> {
-        debug!("Updating note");
-        {
-            let mut conn = self.conn.borrow_mut();
-            let tx = conn.transaction()?;
-
-            let old_text = tx
-                .prepare_cached(
-                    "SELECT text FROM notes
-                    WHERE id = ?1",
-                )?
-                .query_row(params![note.id.0], |row| row.get::<_, String>(0))?;
-
-            if old_text != note.text {
-                tfidf::remove_word_occurences(&tx, &old_text)?;
-                tfidf::insert_word_occurences(&tx, &note.text)?;
-
-                search::tantivy_remove_note(&mut self.index_writer.borrow_mut(), note.rowid)
-                    .unwrap();
-                search::tantivy_add_note(&mut self.index_writer.borrow_mut(), &note).unwrap();
-            }
-
-            tx.prepare_cached(
-                "UPDATE notes
-                SET text = :text,
-                    created_at = :created_at,
-                    modified_at = :modified_at,
-                    done_at = :done_at,
-                    task_state = :task_state
-                WHERE id = :id",
-            )?
-            .execute(named_params! {
-               ":id": note.id.0,
-               ":text": note.text,
-               ":created_at": note.created_at.naive_utc().timestamp_nanos(),
-               ":modified_at": Local::now().naive_utc().timestamp_nanos(),
-               ":done_at": note.done_at.map(|ts| ts.naive_utc().timestamp_nanos()),
-               ":task_state": note.task_state.to_db_value()
-            })?;
-
-            tx.prepare_cached(
-                "DELETE FROM notes_subjects
-                WHERE note_id = ?1",
-            )?
-            .execute(params![note.id.0])?;
-
-            for subject in subjects_or_nil(&note.subjects) {
-                tx.prepare_cached(
-                    "INSERT INTO notes_subjects (note_id, subject_id) VALUES (?1, ?2)",
-                )?
-                .execute(params![note.id.0, subject.0])?;
-            }
-
-            tx.commit()?;
-        }
 
         Ok(())
     }
@@ -300,36 +299,40 @@ impl Store {
     #[instrument(skip(self))]
     pub fn delete_note(&self, note: NoteId) -> rusqlite::Result<()> {
         debug!("Deleting note");
-        {
-            let mut conn = self.conn.borrow_mut();
-            let tx = conn.transaction()?;
+        let mut conn = self.conn.borrow_mut();
+        let tx = conn.transaction()?;
 
-            let (rowid, old_text) = tx
-                .prepare_cached(
-                    "SELECT rowid, text FROM notes
+        self.delete_note_with_tx(&tx, note)?;
+
+        tx.commit()?;
+
+        Ok(())
+    }
+
+    fn delete_note_with_tx(&self, tx: &Connection, note: NoteId) -> rusqlite::Result<()> {
+        let (rowid, old_text) = tx
+            .prepare_cached(
+                "SELECT rowid, text FROM notes
                     WHERE id = ?1",
-                )?
-                .query_row(params![note.0], |row| {
-                    Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
-                })?;
+            )?
+            .query_row(params![note.0], |row| {
+                Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+            })?;
 
-            tfidf::remove_word_occurences(&tx, &old_text)?;
-            search::tantivy_remove_note(&mut self.index_writer.borrow_mut(), rowid).unwrap();
+        tfidf::remove_word_occurences(tx, &old_text)?;
+        search::tantivy_remove_note(&mut self.index_writer.borrow_mut(), rowid).unwrap();
 
-            tx.prepare_cached(
-                "DELETE FROM notes_subjects
+        tx.prepare_cached(
+            "DELETE FROM notes_subjects
                 WHERE note_id = ?1",
-            )?
-            .execute(params![note.0])?;
+        )?
+        .execute(params![note.0])?;
 
-            tx.prepare_cached(
-                "DELETE FROM notes
+        tx.prepare_cached(
+            "DELETE FROM notes
                 WHERE id = ?1",
-            )?
-            .execute(params![note.0])?;
-
-            tx.commit()?;
-        }
+        )?
+        .execute(params![note.0])?;
 
         Ok(())
     }

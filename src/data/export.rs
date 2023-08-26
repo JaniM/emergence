@@ -54,8 +54,13 @@ pub fn import(db_path: PathBuf, import_path: PathBuf) {
         store.import_subject(&subject).unwrap();
     }
 
+    let mut conn = store.conn.borrow_mut();
+    let tx = conn.transaction().unwrap();
+
     // add notes
     for note in serialized.notes {
-        store.import_note(&note).unwrap();
+        store.add_note_with_tx(&tx, note).unwrap();
     }
+
+    tx.commit().unwrap();
 }

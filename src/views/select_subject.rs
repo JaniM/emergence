@@ -57,7 +57,7 @@ pub fn SelectSubject<'a>(cx: Scope<'a, Props<'a>>) -> Element<'a> {
                     Some(subject) if subject.name.to_lowercase() == search.to_lowercase() => {
                         subject.clone()
                     }
-                    _ => layer.write().create_subject(search.clone()),
+                    _ => layer.create_subject(search.clone()),
                 };
                 cx.props.on_select.call(subject);
             }

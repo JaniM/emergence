@@ -261,7 +261,7 @@ pub fn tantivy_add_note(writer: &mut tantivy::IndexWriter, note: &NoteData) -> t
     let text_schema = schema.get_field("text").unwrap();
 
     let text = note.text.clone();
-    let id = note.rowid;
+    let id = note.rowid as u64;
 
     let doc = doc!(
         id_schema => id,
@@ -273,11 +273,11 @@ pub fn tantivy_add_note(writer: &mut tantivy::IndexWriter, note: &NoteData) -> t
     Ok(())
 }
 
-pub fn tantivy_remove_note(writer: &mut tantivy::IndexWriter, rowid: u64) -> tantivy::Result<()> {
+pub fn tantivy_remove_note(writer: &mut tantivy::IndexWriter, rowid: i64) -> tantivy::Result<()> {
     let schema = schema();
     let id_schema = schema.get_field("id").unwrap();
 
-    writer.delete_term(Term::from_field_u64(id_schema, rowid));
+    writer.delete_term(Term::from_field_u64(id_schema, rowid as u64));
     writer.commit().unwrap();
 
     Ok(())

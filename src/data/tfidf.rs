@@ -183,22 +183,16 @@ pub fn fill_word_occurence_table(conn: &rusqlite::Connection) -> rusqlite::Resul
 
 #[cfg(test)]
 mod test {
-    use crate::data::{
-        notes::{NoteBuilder, NoteData},
-        ConnectionType, Store,
-    };
+    use crate::data::{notes::NoteBuilder, ConnectionType, Store};
 
     use super::*;
 
     #[test]
     fn test_best_word_solve() -> rusqlite::Result<()> {
         let store = Store::new(ConnectionType::InMemory);
-        let note1 = store.add_note(NoteBuilder::new(
-            "This has words we care about: xkcd".to_string(),
-        ))?;
-        store.add_note(NoteBuilder::new(
-            "This does not have useful words".to_string(),
-        ))?;
+        let note1 =
+            store.add_note(NoteBuilder::new().text("This has words we care about: xkcd"))?;
+        store.add_note(NoteBuilder::new().text("This does not have useful words"))?;
 
         {
             let conn = store.conn.borrow();
@@ -206,13 +200,8 @@ mod test {
             assert_eq!(words, vec!["xkcd", "word"]);
         }
 
-        store.update_note(
-            NoteData {
-                text: "This no longer has words we care about".to_string(),
-                ..(&*note1).clone()
-            }
-            .to_note(),
-        )?;
+        store
+            .update_note(note1.modify_with(|b| b.text("This no longer has words we care about")))?;
 
         {
             let conn = store.conn.borrow();

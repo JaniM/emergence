@@ -182,6 +182,7 @@ pub fn SidePanel(cx: Scope) -> Element {
 
 #[inline_props]
 fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
+    let subject_id = *subject_id;
     let view_state = use_view_state(cx);
     let layer = use_layer(cx);
 
@@ -189,10 +190,10 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     let subjects = subjects.read();
     let subject_children = use_subject_children(cx);
     let subject_children = subject_children.read();
-    let my_subject = subjects.get(subject_id).unwrap().clone();
+    let my_subject = subjects.get(&subject_id).unwrap().clone();
 
     let children = subject_children
-        .get(subject_id)
+        .get(&subject_id)
         .into_iter()
         .flatten()
         .map(|id| {
@@ -211,8 +212,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
         .collect::<Vec<_>>();
 
     let show_parent_select = use_state(cx, || false);
-    let set_parent =
-        move |parent: Option<SubjectId>| layer.write().set_subject_parent(*subject_id, parent);
+    let set_parent = move |parent: Option<SubjectId>| layer.set_subject_parent(subject_id, parent);
 
     let style = css!(
         "
@@ -305,7 +305,7 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
                         on_cancel: |_| {
                             show_parent_select.set(false);
                         },
-                        ignore_subjects: vec![*subject_id],
+                        ignore_subjects: vec![subject_id],
                         show_above: false,
                     }
                 }

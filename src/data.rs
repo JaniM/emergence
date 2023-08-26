@@ -121,9 +121,7 @@ pub fn shove_test_data(conn: &mut Connection, count: usize) -> Result<()> {
 
 #[cfg(test)]
 mod test {
-    use std::ops::Deref;
-
-    use crate::data::notes::{NoteBuilder, NoteData, NoteSearch, TaskState};
+    use crate::data::notes::{NoteBuilder, NoteSearch, TaskState};
 
     use super::*;
     use rusqlite::Result;
@@ -134,8 +132,8 @@ mod test {
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
-        store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
-        store.add_note(NoteBuilder::new("Test note 2".to_string()).subject(subject2.id))?;
+        store.add_note(NoteBuilder::new().text("Test note 1").subject(subject1.id))?;
+        store.add_note(NoteBuilder::new().text("Test note 2").subject(subject2.id))?;
 
         let note_ids = store.find_notes(NoteSearch::new()).unwrap();
         let notes = store.get_notes(&note_ids).unwrap();
@@ -192,17 +190,14 @@ mod test {
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
-        let note1 =
-            store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
-        let _note2 =
-            store.add_note(NoteBuilder::new("Test note 2".to_string()).subject(subject1.id))?;
+        let note1 = store.add_note(NoteBuilder::new().text("Test note 1").subject(subject1.id))?;
+        let _note2 = store.add_note(NoteBuilder::new().text("Test note 2").subject(subject1.id))?;
 
-        let modified_note1 = NoteData {
-            text: "Test note 1 modified".to_string(),
-            subjects: vec![subject2.id],
-            ..note1.deref().clone()
-        }
-        .to_note();
+        let modified_note1 = NoteBuilder::new()
+            .text("Test note 1 modified")
+            .subject(subject2.id)
+            .modified_now()
+            .apply_to_note(&note1);
 
         store.update_note(modified_note1)?;
 
@@ -241,10 +236,8 @@ mod test {
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
-        let note1 =
-            store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
-        let note2 =
-            store.add_note(NoteBuilder::new("Test note 2".to_string()).subject(subject1.id))?;
+        let note1 = store.add_note(NoteBuilder::new().text("Test note 1").subject(subject1.id))?;
+        let note2 = store.add_note(NoteBuilder::new().text("Test note 2").subject(subject1.id))?;
 
         store.delete_note(note1.id)?;
 
@@ -284,7 +277,8 @@ mod test {
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
         let note1 = store.add_note(
-            NoteBuilder::new("Test note 1".to_string())
+            NoteBuilder::new()
+                .text("Test note 1")
                 .subject(subject1.id)
                 .task_state(TaskState::NotATask),
         )?;
@@ -294,7 +288,7 @@ mod test {
         let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 0);
 
-        store.update_note(note1.with_task_state(TaskState::Todo).to_note())?;
+        store.update_note(note1.modify_with(|b| b.task_state(TaskState::Todo)))?;
 
         let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 1);
@@ -304,15 +298,12 @@ mod test {
         let notes = store.find_notes(search.subject(subject2.id)).unwrap();
         assert_eq!(notes.len(), 0);
 
-        store.update_note(note1.with_task_state(TaskState::Done).to_note())?;
+        store.update_note(note1.modify_with(|b| b.task_state(TaskState::Done)))?;
         let notes = store.find_notes(search).unwrap();
         assert_eq!(notes.len(), 1);
 
         store.update_note(
-            note1
-                .with_task_state(TaskState::Todo)
-                .with_subjects(vec![subject2.id])
-                .to_note(),
+            note1.modify_with(|b| b.task_state(TaskState::Todo).subject(subject2.id)),
         )?;
 
         let notes = store.find_notes(search).unwrap();
@@ -332,8 +323,7 @@ mod test {
         let subject1 = store.add_subject("Test subject 1".to_string())?;
         let subject2 = store.add_subject("Test subject 2".to_string())?;
 
-        let note1 =
-            store.add_note(NoteBuilder::new("Test note 1".to_string()).subject(subject1.id))?;
+        let note1 = store.add_note(NoteBuilder::new().text("Test note 1").subject(subject1.id))?;
 
         assert!(store.delete_subject(subject2.id).is_ok());
 

@@ -1,7 +1,7 @@
 use dioxus::{html::input_data::MouseButton, prelude::*};
 use emergence::data::{
     layer::{use_layer, use_subjects},
-    notes::{Note, TaskState},
+    notes::{Note, NoteBuilder, TaskState},
     subjects::{Subject, SubjectId},
 };
 
@@ -62,9 +62,9 @@ pub fn ViewNote(cx: Scope<'_, ViewNoteProps>) -> Element<'_> {
     };
 
     let actually_delete = {
-        let note = note.clone();
+        let note_id = note.id;
         move |_| {
-            layer.write().delete_note_by_id(note.id);
+            layer.delete_note(note_id);
         }
     };
 
@@ -76,9 +76,7 @@ pub fn ViewNote(cx: Scope<'_, ViewNoteProps>) -> Element<'_> {
                 TaskState::Todo => TaskState::NotATask,
                 TaskState::Done => TaskState::NotATask,
             };
-            layer
-                .write()
-                .edit_note_with(note.id, |note| note.task_state = new_state);
+            layer.edit_note(note.id, NoteBuilder::new().task_state(new_state));
             state.set(State::Normal);
         }
     };
@@ -88,9 +86,7 @@ pub fn ViewNote(cx: Scope<'_, ViewNoteProps>) -> Element<'_> {
         DropdownAction::Delete => state.set(State::ConfirmDelete),
         DropdownAction::MakeTask => make_task(()),
         DropdownAction::Bump => {
-            layer.write().edit_note_with(note.id, |note| {
-                note.created_at = chrono::Local::now();
-            });
+            layer.edit_note(note.id, NoteBuilder::new().created_at(chrono::Local::now()));
             state.set(State::Normal);
         }
     };
@@ -116,30 +112,38 @@ pub fn ViewNote(cx: Scope<'_, ViewNoteProps>) -> Element<'_> {
 
     let task_button = match cx.props.note.task_state {
         TaskState::NotATask => rsx! { div { class: "task-button-place" } },
-        TaskState::Todo => rsx! {
-            div {
-                class: "task-button todo",
-                onclick: move |_| {
-                    layer.write().edit_note_with(cx.props.note.id, |note| {
-                        note.task_state = TaskState::Done;
-                        note.done_at = Some(chrono::Local::now());
-                    });
-                },
-                title: "TODO"
+        TaskState::Todo => {
+            let onclick = move |_| {
+                layer.edit_note(
+                    cx.props.note.id,
+                    NoteBuilder::new()
+                        .task_state(TaskState::Done)
+                        .done_at(Some(chrono::Local::now())),
+                );
+            };
+            rsx! {
+                div {
+                    class: "task-button todo",
+                    onclick: onclick,
+                    title: "TODO"
+                }
             }
-        },
-        TaskState::Done => rsx! {
-            div {
-                class: "task-button done",
-                onclick: move |_| {
-                    layer.write().edit_note_with(cx.props.note.id, |note| {
-                        note.task_state = TaskState::Todo;
-                        note.done_at = None;
-                    });
-                },
-                title: "DONE"
+        }
+        TaskState::Done => {
+            let onclick = move |_| {
+                layer.edit_note(
+                    cx.props.note.id,
+                    NoteBuilder::new().task_state(TaskState::Todo).done_at(None),
+                );
+            };
+            rsx! {
+                div {
+                    class: "task-button done",
+                    onclick: onclick,
+                    title: "DONE"
+                }
             }
-        },
+        }
     };
 
     // Overlay for done notes

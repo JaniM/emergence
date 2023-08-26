@@ -138,14 +138,15 @@ pub fn CreateNote<'a>(cx: Scope<'a, CreateNoteProps<'a>>) -> Element<'a> {
 
     let on_create_note = move |(text, subjects): (String, Vec<SubjectId>)| {
         if !text.is_empty() {
-            let note = NoteBuilder::new(text.clone())
+            let note = NoteBuilder::new()
+                .text(&text)
                 .subjects(subjects)
                 .task_state(if cx.props.task {
                     TaskState::Todo
                 } else {
                     TaskState::NotATask
                 });
-            layer.write().create_note(note);
+            layer.create_note(note);
         }
         cx.props.on_create_note.call(text);
     };
@@ -174,10 +175,7 @@ pub fn EditNote<'a>(cx: Scope<'a, EditNoteProps<'a>>) -> Element<'a> {
     };
 
     let on_create_note = move |(text, subjects): (String, Vec<SubjectId>)| {
-        layer.write().edit_note_with(note_id, |note| {
-            note.text = text;
-            note.subjects = subjects;
-        });
+        layer.edit_note(note_id, NoteBuilder::new().text(text).subjects(subjects));
         cx.props.on_done.call(());
     };
 
@@ -257,7 +255,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
 
     let cancel = move || {
         cleanup();
-        if &*text.read() == cx.props.initial_text.as_deref().unwrap_or_default() {
+        if *text.read() == cx.props.initial_text.as_deref().unwrap_or_default() {
             text.dispose();
         }
         cx.props.on_cancel.call(());
