@@ -238,7 +238,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     // TODO: Combine these states.
     let subjects = use_ref(cx, || cx.props.initial_subjects.clone());
     let show_subjects = use_state(cx, || ShowSubjects::No);
-    let textarea = use_state(cx, || None::<Rc<MountedData>>);
+    let textarea = use_ref(cx, || None::<Rc<MountedData>>);
 
     let view_state = use_view_state(cx);
 
@@ -279,7 +279,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
     let on_select_subject = move |subject: Subject| {
         subjects.write().push(subject.id);
         show_subjects.set(ShowSubjects::No);
-        textarea.get().as_ref().unwrap().set_focus(true);
+        textarea.read().as_ref().unwrap().set_focus(true);
         let t = text.read().clone();
         if *show_subjects.get() == ShowSubjects::YesKeyboard && t.ends_with('@') {
             // remove the @
@@ -293,9 +293,9 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
             SubjectCards {
                 sids: subjects.read().clone(),
                 on_add_subject: |_| show_subjects.set(ShowSubjects::YesMouse),
-                on_click_subject: |subject: Subject| {
+                on_click_subject: move |subject: Subject| {
                     subjects.write().retain(|s| *s != subject.id);
-                    textarea.get().as_ref().unwrap().set_focus(true);
+                    textarea.read().as_ref().unwrap().set_focus(true);
                 },
             },
             div {
@@ -306,7 +306,7 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                     rows: 2,
                     onmounted: move |e| {
                         view_state.write().side_panel.list_similar(text.read().clone());
-                        textarea.set(Some(e.inner().clone()));
+                        *textarea.write_silent() = Some(e.inner().clone());
                         e.inner().set_focus(true);
                         size_textareas();
                     },
@@ -339,9 +339,9 @@ fn NoteInput<'a>(cx: Scope<'a, NoteInputProps<'a>>) -> Element<'a> {
                 rsx! {
                     SelectSubject {
                         on_select: on_select_subject,
-                        on_cancel: |_| {
+                        on_cancel: move |_| {
                             show_subjects.set(ShowSubjects::No);
-                            textarea.get().as_ref().unwrap().set_focus(true);
+                            textarea.read().as_ref().unwrap().set_focus(true);
                         },
                         ignore_subjects: subjects.read().clone(),
                         show_above: true

@@ -216,9 +216,7 @@ fn App(cx: Scope<'_, AppProps>) -> Element<'_> {
                 zoom_level.set(100);
                 window.set_zoom_level(1.0);
             }
-            c => {
-                println!("{:?}", c)
-            }
+            _ => {}
         },
         _ => {}
     };
