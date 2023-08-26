@@ -41,6 +41,25 @@ impl std::fmt::Display for SubjectId {
 
 impl Store {
     #[instrument(skip(self))]
+    pub fn get_subject(&self, id: SubjectId) -> rusqlite::Result<Subject> {
+        let conn = self.conn.borrow();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, name, parent_id
+            FROM subjects
+            WHERE id = ?1
+            ORDER BY name ASC",
+        )?;
+        let subject = stmt.query_row(params![id], |row| {
+            Ok(Rc::new(SubjectData {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                parent_id: row.get(2)?,
+            }))
+        })?;
+        Ok(subject)
+    }
+
+    #[instrument(skip(self))]
     pub fn get_subjects(&self) -> rusqlite::Result<Vec<Subject>> {
         debug!("Begin");
         let conn = self.conn.borrow();
@@ -62,10 +81,13 @@ impl Store {
         Ok(subjects)
     }
 
-    #[instrument(skip(self))]
     pub fn add_subject(&self, name: String) -> rusqlite::Result<Subject> {
+        self.add_subject_with_id(SubjectId(Uuid::new_v4()), name)
+    }
+
+    #[instrument(skip(self))]
+    pub fn add_subject_with_id(&self, id: SubjectId, name: String) -> rusqlite::Result<Subject> {
         debug!("Adding subject");
-        let id = Uuid::new_v4();
         self.conn
             .borrow()
             .prepare_cached(
@@ -75,7 +97,7 @@ impl Store {
             .execute(params![id, name])?;
 
         Ok(Rc::new(SubjectData {
-            id: SubjectId(id),
+            id,
             name,
             parent_id: None,
         }))

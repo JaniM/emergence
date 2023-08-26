@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use dioxus::prelude::{use_context, use_context_provider, ScopeState};
 use dioxus_signals::*;
+use uuid::Uuid;
 
 use super::notes::{NoteBuilder, NoteSearch};
 use super::search::SearchWorker;
@@ -91,11 +92,20 @@ where
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, PartialOrd, Ord, Eq)]
+pub(crate) enum ApplyDirection {
+    Forward,
+    Backward,
+}
+
 pub struct DbActions {
     store: Rc<Store>,
     note_cache: Cache<NoteId, Note>,
     query_cache: Cache<NoteSearch, Vec<NoteId>>,
     last_added_subject: Option<Subject>,
+    undo_queue: VecDeque<LayerAction>,
+    redo_queue: VecDeque<LayerAction>,
+    direction: ApplyDirection,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -105,12 +115,13 @@ pub enum LayerEffect {
     InvalidateSubjects,
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum LayerAction {
     CreateNote(NoteBuilder),
     DeleteNote(NoteId),
     EditNote(NoteId, NoteBuilder),
-    AddSubject(String),
+    AddSubject(Option<SubjectId>, String),
+    RemoveSubject(SubjectId),
     SetSubjectParent {
         subject: SubjectId,
         parent: Option<SubjectId>,
@@ -118,26 +129,75 @@ pub enum LayerAction {
 }
 
 impl DbActions {
-    pub fn new(store: Rc<Store>) -> Self {
+    pub(crate) fn new(store: Rc<Store>) -> Self {
         Self {
             store,
             note_cache: Cache::new(1024),
             query_cache: Cache::new(16),
             last_added_subject: None,
+            undo_queue: VecDeque::new(),
+            redo_queue: VecDeque::new(),
+            direction: ApplyDirection::Forward,
         }
     }
 
-    pub fn perform(&mut self, action: LayerAction) -> LayerEffect {
+    fn add_undo_action(&mut self, action: LayerAction) {
+        if self.undo_queue.len() >= 64 {
+            self.undo_queue.pop_front();
+        }
+        self.undo_queue.push_back(action);
+    }
+
+    fn add_redo_action(&mut self, action: LayerAction) {
+        if self.redo_queue.len() >= 64 {
+            self.redo_queue.pop_front();
+        }
+        self.redo_queue.push_back(action);
+    }
+
+    fn add_backwards(&mut self, action: LayerAction) {
+        match self.direction {
+            ApplyDirection::Forward => self.add_undo_action(action),
+            ApplyDirection::Backward => self.add_redo_action(action),
+        }
+    }
+
+    pub(crate) fn undo(&mut self) -> Option<LayerEffect> {
+        let Some(action) = self.undo_queue.pop_back() else { return None };
+        let effect = self.perform_direction(action, ApplyDirection::Backward);
+        Some(effect)
+    }
+
+    pub(crate) fn redo(&mut self) -> Option<LayerEffect> {
+        let Some(action) = self.redo_queue.pop_back() else { return None };
+        let effect = self.perform_direction(action, ApplyDirection::Forward);
+        Some(effect)
+    }
+
+    pub(crate) fn perform(&mut self, action: LayerAction) -> LayerEffect {
+        self.redo_queue.clear();
+        self.perform_direction(action, ApplyDirection::Forward)
+    }
+
+    pub(crate) fn perform_direction(
+        &mut self,
+        action: LayerAction,
+        direction: ApplyDirection,
+    ) -> LayerEffect {
+        let old_direction = self.direction;
+        self.direction = direction;
         let effect = match action {
             LayerAction::CreateNote(builder) => self.create_note(builder),
             LayerAction::DeleteNote(id) => self.delete_note_by_id(id),
             LayerAction::EditNote(id, builder) => self.edit_note_with(id, builder),
-            LayerAction::AddSubject(name) => self.add_subject(name),
+            LayerAction::AddSubject(id, name) => self.add_subject(id, name),
+            LayerAction::RemoveSubject(id) => self.remove_subject(id),
             LayerAction::SetSubjectParent { subject, parent } => {
                 self.set_subject_parent(subject, parent)
             }
         };
         self.apply_effect(&effect);
+        self.direction = old_direction;
         effect
     }
 
@@ -162,44 +222,73 @@ impl DbActions {
         self.note_cache.invalidate_key(&id);
     }
 
-    pub fn create_note(&mut self, builder: NoteBuilder) -> LayerEffect {
-        self.store.add_note(builder).unwrap();
+    fn create_note(&mut self, builder: NoteBuilder) -> LayerEffect {
+        let note = self.store.add_note(builder).unwrap();
+        self.add_backwards(LayerAction::DeleteNote(note.id));
         LayerEffect::InvalidateQuery
     }
 
-    pub fn delete_note_by_id(&mut self, id: NoteId) -> LayerEffect {
+    fn delete_note_by_id(&mut self, id: NoteId) -> LayerEffect {
+        let note = self.store.get_note(id).unwrap();
         self.store.delete_note(id).unwrap();
+        self.add_backwards(LayerAction::CreateNote(note.to_builder()));
         LayerEffect::InvalidateNote(id)
     }
 
-    pub fn edit_note_with(&mut self, id: NoteId, builder: NoteBuilder) -> LayerEffect {
-        let builder = builder.with_id(id).modified_now();
+    fn edit_note_with(&mut self, id: NoteId, builder: NoteBuilder) -> LayerEffect {
+        let mut builder = builder.with_id(id);
+        if matches!(self.direction, ApplyDirection::Forward) && builder.modified_at.is_none() {
+            builder = builder.modified_now();
+        }
+
         let old_note = self.store.get_note(id).unwrap();
         let note = builder.apply_to_note(&old_note);
         self.store.update_note(note).unwrap();
+
+        self.add_backwards(LayerAction::EditNote(id, old_note.to_builder()));
         LayerEffect::InvalidateNote(id)
     }
 
-    pub fn add_subject(&mut self, name: String) -> LayerEffect {
-        let subject = self.store.add_subject(name).unwrap();
+    fn add_subject(&mut self, id: Option<SubjectId>, name: String) -> LayerEffect {
+        let id = id.unwrap_or_else(|| SubjectId(Uuid::new_v4()));
+        let subject = self.store.add_subject_with_id(id, name).unwrap();
+        self.add_backwards(LayerAction::RemoveSubject(subject.id));
         self.last_added_subject = Some(subject);
         LayerEffect::InvalidateSubjects
     }
 
-    pub fn set_subject_parent(
-        &mut self,
-        subject: SubjectId,
-        parent: Option<SubjectId>,
-    ) -> LayerEffect {
-        self.store.set_subject_parent(subject, parent).unwrap();
+    fn remove_subject(&mut self, subject_id: SubjectId) -> LayerEffect {
+        let subject = self.store.get_subject(subject_id).unwrap();
+        self.store.delete_subject(subject_id).unwrap();
+
+        // TODO: Handle subject parent. Maybe a SubjectBuilder pattern?
+        self.add_backwards(LayerAction::AddSubject(
+            Some(subject_id),
+            subject.name.clone(),
+        ));
+        self.last_added_subject = Some(subject);
         LayerEffect::InvalidateSubjects
     }
 
-    pub fn get_subjects(&self) -> Vec<Subject> {
+    fn set_subject_parent(
+        &mut self,
+        subject_id: SubjectId,
+        parent: Option<SubjectId>,
+    ) -> LayerEffect {
+        let subject = self.store.get_subject(subject_id).unwrap();
+        self.store.set_subject_parent(subject_id, parent).unwrap();
+        self.add_backwards(LayerAction::SetSubjectParent {
+            subject: subject_id,
+            parent: subject.parent_id,
+        });
+        LayerEffect::InvalidateSubjects
+    }
+
+    fn get_subjects(&self) -> Vec<Subject> {
         self.store.get_subjects().unwrap()
     }
 
-    pub fn get_subject_children(&self, subject: SubjectId) -> Vec<SubjectId> {
+    fn get_subject_children(&self, subject: SubjectId) -> Vec<SubjectId> {
         self.store.get_subject_children(subject).unwrap()
     }
 
@@ -373,7 +462,7 @@ impl LayerSignal {
 
     pub fn create_subject(self, name: impl ToString) -> Subject {
         let mut layer = self.layer.write();
-        layer.perform(LayerAction::AddSubject(name.to_string()));
+        layer.perform(LayerAction::AddSubject(None, name.to_string()));
         layer.actions.last_added_subject.clone().unwrap()
     }
 

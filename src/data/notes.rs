@@ -220,6 +220,19 @@ impl NoteData {
         Rc::new(self)
     }
 
+    pub(crate) fn to_builder(&self) -> NoteBuilder {
+        NoteBuilder {
+            rowid: Some(self.rowid),
+            id: Some(self.id),
+            text: Some(self.text.clone()),
+            subjects: Some(self.subjects.clone()),
+            task_state: Some(self.task_state),
+            created_at: Some(self.created_at),
+            modified_at: Some(self.modified_at),
+            done_at: Some(self.done_at),
+        }
+    }
+
     pub fn modify_with(&self, f: impl FnOnce(NoteBuilder) -> NoteBuilder) -> NoteData {
         f(NoteBuilder::new()).apply_to_note(self)
     }
