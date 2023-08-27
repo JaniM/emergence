@@ -64,8 +64,7 @@ pub fn SidePanel(cx: Scope) -> Element {
 
     let content = match &view_state_read.side_panel {
         SidePanelState::Nothing => rsx! {
-            div {
-            }
+            NoSubject {}
         },
         SidePanelState::SubjectDetails(subject) => rsx! {
             SubjectDetails {
@@ -316,12 +315,86 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
     cx.render(rsx! {
         div {
             class: "{style}",
+            UndoRedo {},
             div {
                 parent
             }
             div {
                 class: "children",
                 children.into_iter()
+            }
+        }
+    })
+}
+
+fn NoSubject(cx: Scope) -> Element {
+    let style = css!(
+        "
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        "
+    );
+    cx.render(rsx! {
+        div {
+            class: "{style}",
+            UndoRedo {}
+        }
+    })
+}
+
+fn UndoRedo(cx: Scope) -> Element {
+    let layer = use_layer(cx);
+    let style = css!(
+        "
+        psdding: 10px;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+
+        .button {
+            padding: 0 5px;
+            cursor: pointer;
+
+            &:hover {
+                background-color: #bbb;
+            }
+            &.disabled {
+                opacity: 0.5;
+            }
+        }
+    "
+    );
+    let button_style = |enabled: bool| match enabled {
+        true => "button",
+        false => "button disabled",
+    };
+    cx.render(rsx! {
+        div {
+            class: "{style}",
+            rsx! {
+                div {
+                    class: button_style(layer.read().can_undo()),
+                    onclick: move |_| {
+                        layer.write().undo();
+                    },
+                    div {
+                        "Undo"
+                    }
+                }
+            }
+            rsx! {
+                div {
+                    class: button_style(layer.read().can_redo()),
+                    onclick: move |_| {
+                        layer.write().redo();
+                    },
+                    div {
+                        "Redo"
+                    }
+                }
             }
         }
     })

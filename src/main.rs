@@ -202,6 +202,20 @@ fn App(cx: Scope<'_, AppProps>) -> Element<'_> {
             "f" => {
                 view_state.write().show_search();
             }
+            "z" => {
+                let view = view_state.read();
+                if view.show_input {
+                    return;
+                }
+                layer.write().undo();
+            }
+            "y" => {
+                let view = view_state.read();
+                if view.show_input {
+                    return;
+                }
+                layer.write().redo();
+            }
             "+" => {
                 let new_zoom = *zoom_level.get() + 10;
                 zoom_level.set(new_zoom);

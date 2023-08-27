@@ -336,12 +336,29 @@ impl Layer {
     }
 
     pub fn perform(&mut self, action: LayerAction) {
-        self.with_action(|actions| actions.perform(action))
+        self.with_action(|actions| actions.perform(action).into())
     }
 
-    fn with_action(&mut self, f: impl FnOnce(&mut DbActions) -> LayerEffect) {
+    pub fn can_undo(&self) -> bool {
+        !self.actions.undo_queue.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.actions.redo_queue.is_empty()
+    }
+
+    pub fn undo(&mut self) {
+        self.with_action(|actions| actions.undo());
+    }
+
+    pub fn redo(&mut self) {
+        self.with_action(|actions| actions.redo());
+    }
+
+    fn with_action(&mut self, f: impl FnOnce(&mut DbActions) -> Option<LayerEffect>) {
         self.event();
-        match f(&mut self.actions) {
+        let Some(eff) = f(&mut self.actions) else { return };
+        match eff {
             LayerEffect::InvalidateQuery => {
                 self.update_notes();
             }
