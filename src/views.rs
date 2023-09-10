@@ -1,4 +1,5 @@
 pub mod confirm_dialog;
+pub mod editor;
 pub mod journal;
 pub mod list_notes;
 pub mod markdown;

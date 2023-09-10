@@ -207,11 +207,11 @@ for (let i = 0; i < tx.length; i++) {
     const parentPadding =
         parseInt(parentStyle.getPropertyValue('padding-bottom'))
         + parseInt(parentStyle.getPropertyValue('padding-top'));
-    tx[i].parentElement.setAttribute("style",
+    parent.setAttribute("style",
         "height:" + (tx[i].scrollHeight + parentPadding) + "px;");
     tx[i].setAttribute("style", "height:0;");
     tx[i].setAttribute("style", "height:" + (tx[i].scrollHeight) + "px;");
-    tx[i].parentElement.setAttribute("style", "height: fit-content;");
+    parent.setAttribute("style", "height: fit-content;");
     tx[i].scrollIntoView({ block: "nearest" });
 }
 "#;
