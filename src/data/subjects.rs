@@ -17,6 +17,7 @@ pub struct SubjectData {
     pub id: SubjectId,
     pub name: String,
     pub parent_id: Option<SubjectId>,
+    pub children: Vec<SubjectId>,
 }
 
 pub type Subject = Rc<SubjectData>;
@@ -39,13 +40,28 @@ impl std::fmt::Display for SubjectId {
     }
 }
 
+pub(crate) fn subject_list_from_db(
+    row: &rusqlite::Row,
+    idx: usize,
+) -> rusqlite::Result<Vec<SubjectId>> {
+    let subjects_blob = row.get_ref(idx)?.as_blob_or_null()?.unwrap_or_default();
+    let subjects = subjects_blob
+        .chunks_exact(16)
+        .map(|chunk| Uuid::from_slice(chunk).unwrap())
+        .filter(|id| !id.is_nil())
+        .map(SubjectId)
+        .collect();
+    Ok(subjects)
+}
+
 impl Store {
     #[instrument(skip(self))]
     pub fn get_subject(&self, id: SubjectId) -> rusqlite::Result<Subject> {
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, name, parent_id
-            FROM subjects
+            "SELECT id, name, parent_id,
+                (SELECT concat_blobs(s1.id) FROM subjects s1 WHERE s1.parent_id = s.id)
+            FROM subjects s
             WHERE id = ?1
             ORDER BY name ASC",
         )?;
@@ -54,6 +70,7 @@ impl Store {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 parent_id: row.get(2)?,
+                children: subject_list_from_db(row, 3)?,
             }))
         })?;
         Ok(subject)
@@ -64,8 +81,9 @@ impl Store {
         debug!("Begin");
         let conn = self.conn.borrow();
         let mut stmt = conn.prepare_cached(
-            "SELECT id, name, parent_id
-            FROM subjects
+            "SELECT id, name, parent_id,
+                (SELECT concat_blobs(s1.id) FROM subjects s1 WHERE s1.parent_id = s.id)
+            FROM subjects s
             ORDER BY name ASC",
         )?;
         let subjects = stmt
@@ -74,6 +92,7 @@ impl Store {
                     id: row.get(0)?,
                     name: row.get(1)?,
                     parent_id: row.get(2)?,
+                    children: subject_list_from_db(row, 3)?,
                 }))
             })?
             .collect::<Result<Vec<_>, _>>()?;
@@ -100,6 +119,7 @@ impl Store {
             id,
             name,
             parent_id: None,
+            children: Vec::new(),
         }))
     }
 
@@ -123,20 +143,6 @@ impl Store {
             .execute(params![parent, subject.0])?;
 
         Ok(())
-    }
-
-    pub fn get_subject_children(&self, subject: SubjectId) -> rusqlite::Result<Vec<SubjectId>> {
-        let conn = self.conn.borrow();
-        let mut stmt = conn.prepare_cached(
-            "SELECT id
-            FROM subjects
-            WHERE parent_id = ?1
-            ORDER BY name ASC",
-        )?;
-        let subjects = stmt
-            .query_map(params![subject.0], |row| row.get(0))?
-            .collect::<Result<Vec<_>, _>>()?;
-        Ok(subjects)
     }
 
     pub fn import_subject(&self, subject: &SubjectData) -> rusqlite::Result<()> {

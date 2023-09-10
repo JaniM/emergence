@@ -7,9 +7,14 @@ use uuid::Uuid;
 
 use crate::data::{search, tfidf};
 
-use super::{subjects::SubjectId, Store};
+use super::{
+    subjects::{subject_list_from_db, SubjectId},
+    Store,
+};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
 #[repr(transparent)]
 pub struct NoteId(pub Uuid);
 
@@ -26,7 +31,17 @@ impl FromSql for NoteId {
 }
 
 #[derive(
-    Debug, Default, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize,
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 pub enum TaskState {
     #[default]
@@ -517,13 +532,7 @@ fn tasks_query(subject: Option<SubjectId>) -> String {
 }
 
 pub(super) fn map_row_to_note(row: &Row) -> rusqlite::Result<Note> {
-    let subjects_blob = row.get_ref(3)?.as_blob_or_null()?.unwrap_or_default();
-    let subjects = subjects_blob
-        .chunks_exact(16)
-        .map(|chunk| Uuid::from_slice(chunk).unwrap())
-        .filter(|id| !id.is_nil())
-        .map(SubjectId)
-        .collect();
+    let subjects = subject_list_from_db(row, 3)?;
 
     Ok(Rc::new(NoteData {
         rowid: row.get(0)?,

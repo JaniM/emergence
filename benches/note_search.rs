@@ -41,7 +41,6 @@ pub fn criterion_benchmark(c: &mut Criterion) {
             store.find_notes(NoteSearch {
                 subject_id: Some(subject.id),
                 task_only: true,
-                ..Default::default()
             })
         })
     });

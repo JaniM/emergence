@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 use emergence::data::{
-    layer::{use_layer, use_subject_children, use_subjects},
+    layer::{use_layer, use_subjects},
     subjects::{Subject, SubjectId},
 };
 use sir::css;
@@ -187,14 +187,11 @@ fn SubjectDetails(cx: Scope, subject_id: SubjectId) -> Element {
 
     let subjects = use_subjects(cx);
     let subjects = subjects.read();
-    let subject_children = use_subject_children(cx);
-    let subject_children = subject_children.read();
     let my_subject = subjects.get(&subject_id).unwrap().clone();
 
-    let children = subject_children
-        .get(&subject_id)
-        .into_iter()
-        .flatten()
+    let children = my_subject
+        .children
+        .iter()
         .map(|id| {
             let subject = subjects.get(id).unwrap().clone();
             rsx! {

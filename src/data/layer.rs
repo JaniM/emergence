@@ -1,7 +1,7 @@
 mod test;
 
 use std::collections::hash_map::Entry;
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::hash::Hash;
 use std::ops::Deref;
 use std::rc::Rc;
@@ -102,6 +102,7 @@ pub struct DbActions {
     store: Rc<Store>,
     note_cache: Cache<NoteId, Note>,
     query_cache: Cache<NoteSearch, Vec<NoteId>>,
+    subject_cache: Option<Rc<BTreeMap<SubjectId, Subject>>>,
     last_added_subject: Option<Subject>,
     undo_queue: VecDeque<LayerAction>,
     redo_queue: VecDeque<LayerAction>,
@@ -134,6 +135,7 @@ impl DbActions {
             store,
             note_cache: Cache::new(1024),
             query_cache: Cache::new(16),
+            subject_cache: None,
             last_added_subject: None,
             undo_queue: VecDeque::new(),
             redo_queue: VecDeque::new(),
@@ -210,7 +212,9 @@ impl DbActions {
                 self.invalidate_note_queries();
                 self.invalidate_note(id);
             }
-            LayerEffect::InvalidateSubjects => {}
+            LayerEffect::InvalidateSubjects => {
+                self.invalidate_subjects();
+            }
         }
     }
 
@@ -284,12 +288,25 @@ impl DbActions {
         LayerEffect::InvalidateSubjects
     }
 
-    fn get_subjects(&self) -> Vec<Subject> {
-        self.store.get_subjects().unwrap()
+    fn invalidate_subjects(&mut self) {
+        self.subject_cache = None;
     }
 
-    fn get_subject_children(&self, subject: SubjectId) -> Vec<SubjectId> {
-        self.store.get_subject_children(subject).unwrap()
+    fn get_subjects(&mut self) -> Rc<BTreeMap<SubjectId, Subject>> {
+        if let Some(subjects) = self.subject_cache.clone() {
+            return subjects;
+        }
+
+        let subjects: BTreeMap<_, _> = self
+            .store
+            .get_subjects()
+            .unwrap()
+            .into_iter()
+            .map(|s| (s.id, s))
+            .collect();
+        let subjects = Rc::new(subjects);
+        self.subject_cache = Some(subjects.clone());
+        subjects
     }
 
     fn get_note_ids_for_search(&mut self, search: NoteSearch) -> Vec<NoteId> {
@@ -305,7 +322,6 @@ impl DbActions {
 
 type Notes = Signal<Vec<Note>>;
 type Subjects = Signal<Rc<BTreeMap<SubjectId, Subject>>>;
-type SubjectChildren = Signal<BTreeMap<SubjectId, Vec<SubjectId>>>;
 
 /// Layer provides an abstraction layer over the store to provide a
 /// consistent interface for the rest of the application.
@@ -315,23 +331,16 @@ pub struct Layer {
     query: NoteSearch,
     notes: Notes,
     subjects: Subjects,
-    subject_children: SubjectChildren,
 }
 
 impl Layer {
-    pub fn new(
-        store: Rc<Store>,
-        notes: Notes,
-        subjects: Subjects,
-        subject_children: SubjectChildren,
-    ) -> Self {
+    pub fn new(store: Rc<Store>, notes: Notes, subjects: Subjects) -> Self {
         Self {
             actions: DbActions::new(store),
             event_count: 0,
             query: Default::default(),
             notes,
             subjects,
-            subject_children,
         }
     }
 
@@ -373,14 +382,36 @@ impl Layer {
 
     fn update_notes(&mut self) {
         let search = self.query;
-        let notes = self
+        let note_ids = self.collect_notes_recursively(search);
+        let mut notes = note_ids
+            .into_iter()
+            .map(|id| self.actions.get_note_by_id(id))
+            .collect::<Vec<_>>();
+        notes.sort_unstable_by(|a, b| b.created_at.cmp(&a.created_at));
+        if search.task_only {
+            notes.sort_by(|a, b| a.task_state.cmp(&b.task_state));
+        }
+        *self.notes.write() = notes;
+    }
+
+    fn collect_notes_recursively(&mut self, search: NoteSearch) -> BTreeSet<NoteId> {
+        let mut notes = self
             .actions
             .get_note_ids_for_search(search)
             .into_iter()
-            .map(|id| self.actions.get_note_by_id(id))
-            .collect();
-
-        *self.notes.write() = notes;
+            .collect::<BTreeSet<_>>();
+        if let Some(subject_id) = search.subject_id {
+            let subject = self
+                .actions
+                .get_subjects()
+                .get(&subject_id)
+                .unwrap()
+                .clone();
+            for &child_id in &subject.children {
+                notes.extend(&self.collect_notes_recursively(search.subject(child_id)));
+            }
+        }
+        notes
     }
 
     pub fn search(&self) -> SearchWorker {
@@ -405,27 +436,16 @@ impl Layer {
     }
 
     fn update_subjects(&mut self) {
-        let subject_list = self.actions.get_subjects();
-        let map = subject_list
-            .iter()
-            .map(|s| (s.id, s.clone()))
-            .collect::<BTreeMap<_, _>>();
-        *self.subjects.write() = Rc::new(map);
-
-        *self.subject_children.write() = subject_list
-            .iter()
-            .map(|subject| (subject.id, self.actions.get_subject_children(subject.id)))
-            .collect();
+        *self.subjects.write() = self.actions.get_subjects();
     }
 }
 
 pub fn use_layer_provider(cx: &ScopeState, conn: ConnectionType) -> Signal<Layer> {
     let notes = *use_context_provider(cx, Default::default);
     let subjects = *use_context_provider(cx, Default::default);
-    let subject_children = *use_context_provider(cx, Default::default);
     *use_context_provider(cx, || {
         let store = Store::new(conn);
-        let mut layer = Layer::new(Rc::new(store), notes, subjects, subject_children);
+        let mut layer = Layer::new(Rc::new(store), notes, subjects);
         layer.update_subjects();
         layer.update_notes();
         Signal::new(layer)
@@ -442,10 +462,6 @@ pub fn use_notes(cx: &ScopeState) -> Notes {
 }
 
 pub fn use_subjects(cx: &ScopeState) -> Subjects {
-    *use_context(cx).expect("Layer should be provided")
-}
-
-pub fn use_subject_children(cx: &ScopeState) -> SubjectChildren {
     *use_context(cx).expect("Layer should be provided")
 }
 

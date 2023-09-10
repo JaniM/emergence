@@ -2,7 +2,7 @@
 
 use chrono::{Local, TimeZone};
 use rand::prelude::*;
-use std::rc::Rc;
+use std::{collections::BTreeMap, rc::Rc};
 
 use crate::data::{
     notes::{Note, NoteBuilder, NoteId, NoteSearch},
@@ -73,7 +73,7 @@ fn random_action(
     Some(())
 }
 
-fn store_state(actions: &mut DbActions) -> (Vec<Note>, Vec<Subject>) {
+fn store_state(actions: &mut DbActions) -> (Vec<Note>, Rc<BTreeMap<SubjectId, Subject>>) {
     let notes = actions
         .get_note_ids_for_search(NoteSearch::new())
         .into_iter()
