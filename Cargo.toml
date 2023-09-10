@@ -29,13 +29,13 @@ tantivy = "0.20.2"
 sir = { version = "0.4.0", features = ["dioxus"] }
 ahash = "0.8.3"
 
-dioxus = { git = "https://github.com/Demonthos/dioxus.git", rev = "9c03d68d888453c96be7f1c5ad68b2ec16d64756" }
-dioxus-desktop = { git = "https://github.com/Demonthos/dioxus.git", rev = "9c03d68d888453c96be7f1c5ad68b2ec16d64756" }
-dioxus-signals = { git = "https://github.com/Demonthos/dioxus.git", rev = "9c03d68d888453c96be7f1c5ad68b2ec16d64756" }
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "c8127e164b7f2a64f288dc97271cf5a5ed11da3e" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus", rev = "c8127e164b7f2a64f288dc97271cf5a5ed11da3e" }
+dioxus-signals = { git = "https://github.com/DioxusLabs/dioxus", rev = "c8127e164b7f2a64f288dc97271cf5a5ed11da3e" }
 
 [patch.crates-io]
-dioxus = { git = "https://github.com/Demonthos/dioxus.git", rev = "9c03d68d888453c96be7f1c5ad68b2ec16d64756" }
-dioxus-desktop = { git = "https://github.com/Demonthos/dioxus.git", rev = "9c03d68d888453c96be7f1c5ad68b2ec16d64756" }
+dioxus = { git = "https://github.com/DioxusLabs/dioxus", rev = "c8127e164b7f2a64f288dc97271cf5a5ed11da3e" }
+dioxus-desktop = { git = "https://github.com/DioxusLabs/dioxus", rev = "c8127e164b7f2a64f288dc97271cf5a5ed11da3e" }
 
 [dev-dependencies]
 criterion = "0.4"
