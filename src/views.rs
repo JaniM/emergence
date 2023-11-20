@@ -1,3 +1,4 @@
+pub mod command_palette;
 pub mod confirm_dialog;
 pub mod journal;
 pub mod list_notes;
@@ -28,6 +29,7 @@ pub struct ViewState {
     pub scroll_to_note: Option<NoteId>,
     pub selected_subject: Option<SubjectId>,
     pub side_panel: SidePanelState,
+    pub command_palette: bool,
 }
 
 impl ViewState {
